@@ -6,7 +6,6 @@
 export const defaultScene = {
   pattern: `setcps(0.42)
 
-// ── палитра ──────────────────────────────────────────────
 const harmony = "<[c3,eb3,g3,bb3] [ab2,c3,eb3,g3] [eb3,g3,bb3,c4] [f2,ab2,c3,eb3]>"
 const roots   = "<c2 ab1 eb2 f2>"
 
@@ -36,73 +35,43 @@ const dnbDrums = stack(
 const dnbBass = note(roots).s("sawtooth").lpf(500).lpq(5)
   .struct("x ~ ~ x ~ ~ x ~").gain(0.75)
 
-// ── аранжировка (24 цикла, бесшовная петля) ──────────────
 arrange(
-  [4, stack(pad, crackle)],                                       // intro
-  [4, stack(pad, bass, crackle, hats)],                           // build
-  [8, stack(pad, bass, kick, clap, hats, ohat, lead, crackle)],   // house drop
-  [4, stack(pad, dnbDrums, dnbBass, lead.gain(0.28), crackle)],   // DnB break
-  [4, stack(pad, bass.gain(0.5), hats.gain(0.22), crackle)]       // outro -> intro
+  [4, stack(pad, crackle)],                                    
+  [4, stack(pad, bass, crackle, hats)],                        
+  [8, stack(pad, bass, kick, clap, hats, ohat, lead, crackle)],
+  [4, stack(pad, dnbDrums, dnbBass, lead.gain(0.28), crackle)],
+  [4, stack(pad, bass.gain(0.5), hats.gain(0.22), crackle)]    
 )`,
 
-  shader: `// ── палитра ──────────────────────────────────────────────
-vec3 hsv2rgb(vec3 c){
-  vec3 p = abs(fract(c.xxx + vec3(0.0,2.0/3.0,1.0/3.0))*6.0-3.0);
-  return c.z * mix(vec3(1.0), clamp(p-1.0,0.0,1.0), c.y);
+  shader: `vec3 hsv2rgb(vec3 c) {
+  vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
 }
 
-// domain-warp турбулентность (твоя петля)
-vec2 warp(vec2 uv, float t, float amt, float fa, float fb){
-  for(float i=1.0;i<8.0;i++){
-    uv.x += amt/i * cos(i*fa*uv.y + t);
-    uv.y += amt/i * cos(i*fb*uv.x + t);
-  }
-  return uv;
-}
-
-// поле филаментов (sin ограничен -> значение всегда конечно, без NaN)
-float field(vec2 uv, float t){
-  return 0.1 / max(abs(sin(t - uv.x - uv.y)), 0.06);
-}
-
-void mainImage(out vec4 fragColor, in vec2 fragCoord){
-  vec2 res = uResolution;
-  vec2 uv = (2.0*fragCoord - res)/min(res.x,res.y);
-
-  float sec  = smoothstep(0.2, 0.85, uEnergy);  // 0 интро .. 1 дроп
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = (fragCoord - 0.5 * uResolution) / uResolution.y;
+  vec2 uv0 = uv;
+  vec3 col = vec3(0.0);
   float pad  = clamp(uPad, 0.0, 1.0);
-  float kick = uKick;
-  float d    = length(uv);
+  
+  uv *= 1.0 - uKick * 0.15;
 
-  // ── ФОН: облака другого цвета, дрейф в обратную сторону, весь кадр ──
-  vec2 bwarp = warp(uv*1.2, -uTime*0.20, 0.55, 2.0, 1.3);
-  vec3 bg = hsv2rgb(vec3(fract(uHue+0.5+uTime*0.01), 0.6, 1.0)) * field(bwarp, uTime*0.3);
-  bg *= mix(0.85, 0.45, sec);                    // на дропе фон тусклее
+  for (float i = 0.0; i < 4.0; i++) {
+    uv = fract(uv * 1.5 - pad) - 0.5;
+    float d = length(uv) * exp(-length(uv0));
 
-  // ── ЦЕНТРАЛЬНЫЙ ШАР: формируется к дропу, пульсирует под кик ──
-  float R = mix(0.0, 1.05, sec) + pad*0.04;      // радиус: 0 в интро -> растёт
-  R *= 1.0 + kick*0.18;                          // кик «надувает» шар
-  float ball = smoothstep(R, R-0.45, d);         // 1 в ядре, мягкий край к R
+    vec3 c = hsv2rgb(vec3(uHue + i * 0.05 + uTime * 0.02, 0.7, 1.0));
 
-  // выпуклая линза-фишай внутри шара
-  vec2 sp = uv / max(R, 0.001);
-  float z = sqrt(max(0.0, 1.0 - dot(sp, sp)));
-  vec2 luv = sp / (z + 0.7);                      // центр выпучивается наружу
-  vec2 fwarp = warp(luv*1.4, uTime*0.6, 0.6, 2.5, 1.5);
-  float ff = field(fwarp, uTime) * (1.0 + kick*1.6);   // пульс под кик
-  vec3 sphere = hsv2rgb(vec3(fract(uHue + pad*0.06), mix(0.5,0.95,sec), 1.0)) * ff;
+    d = sin(d * 8.0 + uTime + uPitch * 6.28) / 8.0;
+    d = abs(d);
+    d = pow(0.012 / d, 1.3);
 
-  // стеклянный ободок по краю шара
-  float rim = smoothstep(0.045, 0.0, abs(d - R)) * sec;
-  sphere += vec3(1.0) * rim * (0.3 + kick*0.4);
+    col += c * d;
+  }
 
-  // ── композит ──
-  vec3 col = mix(bg, sphere, ball);
-  col *= 0.85 + pad*0.5;                          // дыхание пэда
-  col += vec3(uSnare)*0.22;                       // блик снейра
-  col += hsv2rgb(vec3(fract(uHue+0.15),0.6,1.0))*uHat*0.20*(1.0-ball); // искры хэтов вокруг
-  col *= 1.0 - 0.25*dot(uv,uv);                   // виньетка
-  col = pow(max(col,0.0), vec3(0.85));
+  col += vec3(uSnare) * 0.25;
+
+  col += vec3(0.1, 0.2, 0.3) * uHat * length(uv0);
 
   fragColor = vec4(col, 1.0);
 }`,
