@@ -5,7 +5,7 @@
 //   2) обернуть аудио-вывод и дополнительно дёргать визуальный колбэк
 //      РОВНО в момент звучания (через deadline), а не с упреждением.
 
-import { repl, evalScope, controls } from '@strudel/core';
+import { repl, evalScope, controls, register, Pattern } from '@strudel/core';
 import {
   initAudioOnFirstClick,
   getAudioContext,
@@ -13,6 +13,7 @@ import {
   registerSynthSounds,
   registerZZFXSounds,
   samples,
+  soundMap,
 } from '@strudel/webaudio';
 import { transpiler } from '@strudel/transpiler';
 import { registerSoundfonts } from '@strudel/soundfonts';
@@ -103,6 +104,25 @@ function makeOutput() {
   };
 }
 
+// делает каждое имя звука из soundMap методом паттерна (.piano(), .casio() ...)
+function registerSoundsAsMethods() {
+  let names = [];
+  try {
+    names = Object.keys(soundMap.get() || {});
+  } catch (e) {
+    return;
+  }
+  for (const name of names) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) continue; // валидный JS-идентификатор
+    if (Pattern.prototype[name]) continue;                // не затираем существующие методы
+    try {
+      register(name, (pat) => pat.s(name));
+    } catch (e) {
+      /* конфликт имени — пропускаем */
+    }
+  }
+}
+
 export async function initAudio() {
   if (initialized) return;
 
@@ -139,6 +159,11 @@ export async function initAudio() {
     samples(ds + 'vcsl.json'),
     samples(ds + 'mridangam.json'),
   ]);
+
+  // делаем каждое зарегистрированное имя звука методом паттерна:
+  // .piano(), .tambourine(), .gm_clarinet() и т.д. (как .s("name")).
+  // Пропускаем имена-невалидные-идентификаторы и уже существующие функции.
+  registerSoundsAsMethods();
 
   const r = repl({
     defaultOutput: makeOutput(),
