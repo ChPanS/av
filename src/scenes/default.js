@@ -51,7 +51,7 @@ vec3 hsv2rgb(vec3 c){
   return c.z * mix(vec3(1.0), clamp(p-1.0,0.0,1.0), c.y);
 }
 
-// domain-warp турбулентность: твоя петля, вынесена в функцию
+// domain-warp турбулентность (твоя петля)
 vec2 warp(vec2 uv, float t, float amt, float fa, float fb){
   for(float i=1.0;i<8.0;i++){
     uv.x += amt/i * cos(i*fa*uv.y + t);
@@ -60,44 +60,48 @@ vec2 warp(vec2 uv, float t, float amt, float fa, float fb){
   return uv;
 }
 
+// поле филаментов (sin ограничен -> значение всегда конечно, без NaN)
+float field(vec2 uv, float t){
+  return 0.1 / max(abs(sin(t - uv.x - uv.y)), 0.06);
+}
+
 void mainImage(out vec4 fragColor, in vec2 fragCoord){
   vec2 res = uResolution;
   vec2 uv = (2.0*fragCoord - res)/min(res.x,res.y);
 
-  float sec  = smoothstep(0.25, 0.9, uEnergy); // 0 интро .. 1 дроп
+  float sec  = smoothstep(0.2, 0.85, uEnergy);  // 0 интро .. 1 дроп
   float pad  = clamp(uPad, 0.0, 1.0);
   float kick = uKick;
+  float d    = length(uv);
 
-  // камера: интро — широкий дрейф; дроп — наезд к центру + микро-удар по кику
-  float zoom = mix(1.35, 0.78, sec) * (1.0 - kick*0.06);
-  vec2 cuv = uv * zoom;
-  float center = smoothstep(1.3, 0.0, length(uv));
+  // ── ФОН: облака другого цвета, дрейф в обратную сторону, весь кадр ──
+  vec2 bwarp = warp(uv*1.2, -uTime*0.20, 0.55, 2.0, 1.3);
+  vec3 bg = hsv2rgb(vec3(fract(uHue+0.5+uTime*0.01), 0.6, 1.0)) * field(bwarp, uTime*0.3);
+  bg *= mix(0.85, 0.45, sec);                    // на дропе фон тусклее
 
-  // ФОН: облака другого цвета, дрейф в обратную сторону, всегда живые
-  vec2 buv = warp(cuv*1.25, -uTime*0.18, 0.55, 2.0, 1.3);
-  float bf = 0.09 / max(abs(sin(uTime*0.3 - buv.x - buv.y)), 0.05);
-  float bhue = fract(uHue + 0.5 + uTime*0.01);
-  vec3 bg = hsv2rgb(vec3(bhue, mix(0.5,0.75,sec), 1.0)) * bf;
-  bg *= mix(0.9, 0.5, sec);                    // на дропе фон тусклее
+  // ── ЦЕНТРАЛЬНЫЙ ШАР: формируется к дропу, пульсирует под кик ──
+  float R = mix(0.0, 1.05, sec) + pad*0.04;      // радиус: 0 в интро -> растёт
+  R *= 1.0 + kick*0.18;                          // кик «надувает» шар
+  float ball = smoothstep(R, R-0.45, d);         // 1 в ядре, мягкий край к R
 
-  // ПЕРЕДНИЙ слой: на дропе стягивается к центру (фишай) и пульсирует
-  vec2 fuv = cuv * mix(1.0, 0.5, sec);
-  float r = length(fuv);
-  fuv *= 1.0 + sec*0.7*r*r;                     // баррель/фишай, крепнет к дропу
-  vec2 wuv = warp(fuv, uTime*0.5, 0.6, 2.5, 1.5);
-  float ff = 0.1 / max(abs(sin(uTime - wuv.x - wuv.y)), 0.05);
+  // выпуклая линза-фишай внутри шара
+  vec2 sp = uv / max(R, 0.001);
+  float z = sqrt(max(0.0, 1.0 - dot(sp, sp)));
+  vec2 luv = sp / (z + 0.7);                      // центр выпучивается наружу
+  vec2 fwarp = warp(luv*1.4, uTime*0.6, 0.6, 2.5, 1.5);
+  float ff = field(fwarp, uTime) * (1.0 + kick*1.6);   // пульс под кик
+  vec3 sphere = hsv2rgb(vec3(fract(uHue + pad*0.06), mix(0.5,0.95,sec), 1.0)) * ff;
 
-  ff *= 1.0 + kick*(0.4 + sec*1.6)*mix(0.4,1.0,center);  // пульс под кик
-  ff *= mix(1.0, 0.5 + 1.1*center, sec);                 // свечение в центр на дропе
+  // стеклянный ободок по краю шара
+  float rim = smoothstep(0.045, 0.0, abs(d - R)) * sec;
+  sphere += vec3(1.0) * rim * (0.3 + kick*0.4);
 
-  float fhue = fract(uHue + pad*0.06 + uTime*0.008);
-  vec3 fg = hsv2rgb(vec3(fhue, mix(0.4,0.95,sec), 1.0)) * ff;
-
-  vec3 col = bg + fg;
-  col *= 0.85 + pad*0.5;                         // дыхание пэда
-  col += vec3(uSnare)*0.22;                      // блик снейра
-  col += hsv2rgb(vec3(fract(uHue+0.15),0.6,1.0))*uHat*0.22*(1.0-center); // искры хэтов
-  col *= 1.0 - 0.25*dot(uv,uv);                  // виньетка
+  // ── композит ──
+  vec3 col = mix(bg, sphere, ball);
+  col *= 0.85 + pad*0.5;                          // дыхание пэда
+  col += vec3(uSnare)*0.22;                       // блик снейра
+  col += hsv2rgb(vec3(fract(uHue+0.15),0.6,1.0))*uHat*0.20*(1.0-ball); // искры хэтов вокруг
+  col *= 1.0 - 0.25*dot(uv,uv);                   // виньетка
   col = pow(max(col,0.0), vec3(0.85));
 
   fragColor = vec4(col, 1.0);

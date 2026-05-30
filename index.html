@@ -95,9 +95,28 @@
     .logline.err   { color: var(--err); }
 
     @media (max-width: 820px) {
+      body { overflow-y: auto; }
+      header { padding: 10px 14px; }
+      header .mark { font-size: 17px; }
+      header .sub { display: none; }              /* экономим место на узком экране */
+
       main { flex-direction: column; }
-      .left { width: 100%; min-width: 0; height: 50%; border-right: none; border-bottom: 1px solid var(--line); }
-      #status { max-width: 40%; }
+
+      /* 1) поле ввода кода — сверху */
+      .left { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--line); }
+      .editors { height: 38vh; }
+      .logpanel { height: 26vh; }
+
+      /* 2) «плеер» (рендер) — по центру */
+      .right { width: 100%; }
+      #stage { height: 42vh; min-height: 240px; }
+
+      /* 3) кнопки — снизу, крупные, по 2 в ряд */
+      .controls { flex-wrap: wrap; gap: 8px; padding: 10px; }
+      .controls .spacer { display: none; }
+      button.ctl { flex: 1 1 auto; min-width: calc(50% - 6px); padding: 12px 10px; font-size: 13px; text-align: center; }
+      #play { min-width: calc(50% - 6px); }
+      #status { width: 100%; max-width: none; text-align: left; order: 99; padding: 6px 2px 0; }
     }
   </style>
 </head>
