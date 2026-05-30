@@ -7,7 +7,13 @@ import { uniforms, decayUniforms } from './bridge.js';
 let gl, canvas, program, vao;
 let startTime = performance.now();
 let rafId = null;
+let clockProvider = null; // () => { beat, loop, frac } | null
 const uLoc = {}; // кэш локаций юниформов
+
+// источник часов лупа (ставит main.js: () => getClock())
+export function setClockProvider(fn) {
+  clockProvider = fn;
+}
 
 const VERT = `#version 300 es
 in vec2 a_pos;
@@ -27,6 +33,9 @@ uniform float uPitch;
 uniform float uHue;
 uniform float uEnergy;
 uniform float uPad;
+uniform float uBeat;
+uniform float uLoop;
+uniform float uBeatFrac;
 
 out vec4 outColor;
 
@@ -118,6 +127,15 @@ export function loadShader(userBody) {
 
 function frame() {
   uniforms.uTime = (performance.now() - startTime) / 1000;
+  // часы лупа
+  if (clockProvider) {
+    const c = clockProvider();
+    if (c) {
+      uniforms.uBeat = c.beat;
+      uniforms.uLoop = c.loop;
+      uniforms.uBeatFrac = c.frac;
+    }
+  }
   resize();
 
   gl.clearColor(0, 0, 0, 1);
@@ -136,6 +154,9 @@ function frame() {
     gl.uniform1f(uLoc.uHue, uniforms.uHue);
     gl.uniform1f(uLoc.uEnergy, uniforms.uEnergy);
     gl.uniform1f(uLoc.uPad, uniforms.uPad);
+    gl.uniform1f(uLoc.uBeat, uniforms.uBeat);
+    gl.uniform1f(uLoc.uLoop, uniforms.uLoop);
+    gl.uniform1f(uLoc.uBeatFrac, uniforms.uBeatFrac);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

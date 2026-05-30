@@ -13,8 +13,9 @@ if (import.meta.env.DEV) {
 import {
   initAudio, setHapCallback, setStateCallback, getState,
   evaluatePattern, start, stop, isInitialized, getCps, getRecorderStream,
+  getClock, setLoopCycles, setMasterVolume,
 } from './audio.js';
-import { initRenderer, loadShader, startRenderLoop, getCanvas } from './renderer.js';
+import { initRenderer, loadShader, startRenderLoop, getCanvas, setClockProvider } from './renderer.js';
 import { handleHap } from './bridge.js';
 import { createEditor } from './editor.js';
 import { computeClipDuration, recordClip, downloadBlob } from './recorder.js';
@@ -28,6 +29,10 @@ const shareBtn = $('share');
 const fsBtn = $('fullscreen');
 const linkBtn = $('copylink');
 const debugBtn = $('debug');
+const infoBtn = $('info');
+const infoModal = $('infomodal');
+const infoClose = $('infoclose');
+const volSlider = $('volume');
 const status = $('status');
 const logPanel = $('logpanel');
 const logEl = $('log');
@@ -141,6 +146,7 @@ function reportError(prefix, e) {
 
 // ---------- рендер сразу (без звука) ----------
 initRenderer(canvas);
+setClockProvider(getClock);   // uBeat/uLoop/uBeatFrac берутся из часов лупа
 applyShader(true);
 startRenderLoop();
 
@@ -187,6 +193,7 @@ playBtn.onclick = async () => {
       log('initAudio: загрузка сэмплов…', 'info');
       await initAudio();
       setHapCallbackSafe();
+      setMasterVolume((volSlider?.value ?? 50) / 100); // применяем громкость слайдера
       log('audio готов', 'ok');
     }
 
@@ -196,6 +203,9 @@ playBtn.onclick = async () => {
     // 2) паттерн (live). ВАЖНО: evaluate НЕ бросает исключение при ошибке кода —
     //    он пишет её в state.evalError. Поэтому проверяем состояние вручную.
     const code = patternEd.get();
+    // длина лупа для uBeat: из комментария "// loop: N" в паттерне (иначе 24)
+    const loopMatch = code.match(/loop:\s*(\d+)/i);
+    setLoopCycles(loopMatch ? parseInt(loopMatch[1], 10) : 24);
     if (debugOn) {
       log('evaluate pattern:', 'info');
       code.split('\n').forEach((l) => log('  ' + l, 'info'));
@@ -282,6 +292,24 @@ linkBtn.onclick = async () => {
     location.hash = hash;
   }
 };
+
+// ---------- громкость (мастер) ----------
+if (volSlider) {
+  volSlider.value = 50; // дефолт 50%
+  volSlider.addEventListener('input', () => {
+    setMasterVolume(volSlider.value / 100); // no-op пока audio не инициализирован
+    setStatus('громкость ' + volSlider.value + '%');
+  });
+}
+
+// ---------- инфо-модалка ----------
+if (infoBtn && infoModal) {
+  infoBtn.onclick = () => infoModal.classList.remove('hidden');
+  infoClose.onclick = () => infoModal.classList.add('hidden');
+  infoModal.addEventListener('click', (e) => {
+    if (e.target === infoModal) infoModal.classList.add('hidden'); // клик по фону закрывает
+  });
+}
 
 // ---------- хоткей: Ctrl/Cmd+Enter = play (как в Strudel) ----------
 window.addEventListener('keydown', (e) => {

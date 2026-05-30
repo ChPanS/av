@@ -94,6 +94,25 @@
     .logline.event { color: #6f7b86; }
     .logline.err   { color: var(--err); }
 
+    /* слайдер громкости */
+    .vol { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--dim); }
+    .vol input[type=range] { width: 90px; accent-color: var(--accent); cursor: pointer; }
+
+    /* инфо-модалка */
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+    .modal.hidden { display: none; }
+    .modal-box { position: relative; max-width: 620px; max-height: 84vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 26px 28px; }
+    .modal-box h2 { font-family: 'Syne', sans-serif; margin: 0 0 12px; color: var(--accent); }
+    .modal-box h3 { font-size: 13px; letter-spacing: 0.04em; margin: 20px 0 8px; color: var(--text); }
+    .modal-box p { font-size: 13px; line-height: 1.6; color: #c4c9d0; margin: 8px 0; }
+    .modal-box a { color: var(--accent); }
+    .modal-box code { background: #0a0b0d; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 12px; color: #d6dbe2; }
+    .modal-box ul.uni { list-style: none; margin: 8px 0; padding: 0; }
+    .modal-box ul.uni li { font-size: 12.5px; line-height: 1.7; color: #c4c9d0; border-bottom: 1px solid #1a1d22; padding: 3px 0; }
+    .modal-box .dim { color: var(--dim); }
+    .modal-close { position: absolute; top: 14px; right: 14px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; }
+    .modal-close:hover { border-color: var(--accent); }
+
     @media (max-width: 820px) {
       body { overflow-y: auto; }
       header { padding: 10px 14px; }
@@ -157,11 +176,54 @@
         <button class="ctl" id="fullscreen">⤢ fullscreen</button>
         <button class="ctl" id="copylink">⎘ link</button>
         <button class="ctl" id="debug">⚙ debug</button>
+        <button class="ctl" id="info">? help</button>
+        <label class="vol"><span>vol</span><input type="range" id="volume" min="0" max="100" value="50"></label>
         <span class="spacer"></span>
         <span id="status">нажми play (Ctrl+Enter)</span>
       </div>
     </section>
   </main>
+
+  <div class="modal hidden" id="infomodal">
+    <div class="modal-box">
+      <button class="modal-close" id="infoclose">✕</button>
+      <h2>av · livecoding</h2>
+      <p>Слева пишешь <b>музыку</b> на Strudel и <b>шейдер</b> на GLSL. Кнопка
+      <b>play / update</b> применяет код вживую (или <b>Ctrl/Cmd+Enter</b>),
+      <b>stop</b> — глушит, <b>share</b> — пишет видео-клип длиной в целое число
+      циклов, <b>link</b> — копирует ссылку со сценой, <b>vol</b> — общая громкость.</p>
+
+      <h3>Музыка — Strudel</h3>
+      <p>Паттерны в мини-нотации: <code>s("bd*4")</code>, аккорды, эффекты, <code>arrange()</code>.
+      Полный туториал и справка: <a href="https://strudel.cc/learn" target="_blank" rel="noopener">strudel.cc/learn</a>.
+      Длину лупа для <code>uBeat</code> можно задать комментарием <code>// loop: N</code>
+      в начале паттерна (по умолчанию 24).</p>
+
+      <h3>Как работает шейдер</h3>
+      <p>Ты пишешь функцию <code>mainImage(out vec4 fragColor, in vec2 fragCoord)</code> —
+      она выполняется для каждого пикселя и возвращает его цвет. Движок прокидывает
+      туда «ручки» (uniforms), которые движутся под музыку. Введение в GLSL:
+      <a href="https://thebookofshaders.com" target="_blank" rel="noopener">thebookofshaders.com</a>.</p>
+
+      <h3>Доступные uniforms</h3>
+      <ul class="uni">
+        <li><code>vec2 uResolution</code> — размер кадра в пикселях</li>
+        <li><code>float uTime</code> — секунды с запуска (непрерывно растёт)</li>
+        <li><code>float uKick</code> — импульс бочки (всплеск к 1, затухает)</li>
+        <li><code>float uSnare</code> — импульс снейра/клэпа</li>
+        <li><code>float uHat</code> — импульс хэтов</li>
+        <li><code>float uPitch</code> — высота последней ноты в октаве, 0..1</li>
+        <li><code>float uHue</code> — оттенок, плавно ведётся за гармонией, 0..1</li>
+        <li><code>float uEnergy</code> — плотность/громкость потока, 0..1 (прокси «интро↔дроп»)</li>
+        <li><code>float uPad</code> — сустейн гармонических синтов (пэд), мягкая огибающая</li>
+        <li><code>float uBeat</code> — позиция в лупе в циклах: 0..N; <code>floor(uBeat)</code> = номер такта</li>
+        <li><code>float uLoop</code> — позиция в лупе нормированная 0..1 (сбрасывается в 0 на конце)</li>
+        <li><code>float uBeatFrac</code> — фаза внутри текущего цикла, 0..1</li>
+      </ul>
+      <p class="dim">Пример: <code>floor(uBeat)</code> даёт номер такта — можно менять
+      сцену по тактам; <code>uLoop</code> хорош для плавных переходов через весь луп.</p>
+    </div>
+  </div>
 
   <script type="module" src="/src/main.js"></script>
 </body>
