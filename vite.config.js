@@ -8,5 +8,6 @@ export default defineConfig({
   },
   build: {
     target: 'esnext', // strudel использует свежие фичи (top-level await и т.д.)
+    chunkSizeWarningLimit: 2000, // Strudel объективно крупный, это не проблема
   },
 });

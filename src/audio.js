@@ -6,6 +6,11 @@
 //      РОВНО в момент звучания (через deadline), а не с упреждением.
 
 import { repl, evalScope, controls, register, Pattern } from '@strudel/core';
+import * as strudelCore from '@strudel/core';
+import * as strudelMini from '@strudel/mini';
+import * as strudelTonal from '@strudel/tonal';
+import * as strudelDraw from '@strudel/draw';
+import * as strudelWebaudio from '@strudel/webaudio';
 import {
   initAudioOnFirstClick,
   getAudioContext,
@@ -127,13 +132,15 @@ export async function initAudio() {
   if (initialized) return;
 
   // регистрируем мини-нотацию, тональные хелперы, синты, эффекты и draw в scope eval
+  // (статические namespace-импорты, чтобы не было предупреждений о смешении
+  //  динамического и статического импорта)
   await evalScope(
     controls,
-    import('@strudel/core'),
-    import('@strudel/mini'),
-    import('@strudel/tonal'),
-    import('@strudel/draw'),
-    import('@strudel/webaudio'),
+    strudelCore,
+    strudelMini,
+    strudelTonal,
+    strudelDraw,
+    strudelWebaudio,
   );
 
   const ctx = getAudioContext();
