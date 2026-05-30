@@ -4,6 +4,8 @@
 
 function pickMime() {
   const candidates = [
+    'video/mp4;codecs=h264,aac',   // нативный mp4 (Safari, новые Chrome) — без конвертации
+    'video/mp4',
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm',

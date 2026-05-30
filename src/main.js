@@ -19,6 +19,7 @@ import { initRenderer, loadShader, startRenderLoop, getCanvas, setClockProvider 
 import { handleHap } from './bridge.js';
 import { createEditor } from './editor.js';
 import { computeClipDuration, recordClip, downloadBlob } from './recorder.js';
+import { convertWebmToMp4 } from './mp4.js';
 import { defaultScene } from './scenes/default.js';
 
 const $ = (id) => document.getElementById(id);
@@ -269,9 +270,29 @@ shareBtn.onclick = async () => {
       fps: 60,
       onProgress: (p) => setStatus(`запись… ${Math.round(p * 100)}%`),
     });
-    downloadBlob(blob, 'av-clip.webm');
-    setStatus('готово — клип скачан (.webm)');
-    log('клип готов (' + (blob.size / 1024 / 1024).toFixed(1) + ' МБ)', 'ok');
+    // нативный mp4 (Safari/новые Chrome) -> отдаём сразу, без конвертации
+    if (blob.type.includes('mp4')) {
+      downloadBlob(blob, 'av-clip.mp4');
+      setStatus('готово — mp4 скачан');
+      log('клип готов (нативный mp4, ' + (blob.size / 1024 / 1024).toFixed(1) + ' МБ)', 'ok');
+    } else {
+      // webm -> конвертируем в mp4 через ffmpeg.wasm (ленивая загрузка ~31МБ)
+      setStatus('конвертация webm → mp4 (первый раз грузит ~31МБ ядро)…');
+      log('конвертация webm → mp4 через ffmpeg.wasm…', 'info');
+      try {
+        const mp4 = await convertWebmToMp4(blob, {
+          onProgress: (p) => setStatus('конвертация… ' + Math.round(p * 100) + '%'),
+          onLog: (m) => { if (debugOn) log('[ffmpeg] ' + m, 'cmd'); },
+        });
+        downloadBlob(mp4, 'av-clip.mp4');
+        setStatus('готово — mp4 скачан');
+        log('mp4 готов (' + (mp4.size / 1024 / 1024).toFixed(1) + ' МБ)', 'ok');
+      } catch (convErr) {
+        // если конвертация упала (память/сеть на слабом устройстве) — отдаём webm
+        reportError('Конвертация не удалась, отдаю webm', convErr);
+        downloadBlob(blob, 'av-clip.webm');
+      }
+    }
   } catch (e) {
     reportError('Запись не удалась', e);
   } finally {
