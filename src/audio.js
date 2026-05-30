@@ -11,9 +11,11 @@ import {
   getAudioContext,
   webaudioOutput,
   registerSynthSounds,
+  registerZZFXSounds,
   samples,
 } from '@strudel/webaudio';
 import { transpiler } from '@strudel/transpiler';
+import { registerSoundfonts } from '@strudel/soundfonts';
 
 let scheduler = null;
 let evaluate = null;
@@ -104,21 +106,39 @@ function makeOutput() {
 export async function initAudio() {
   if (initialized) return;
 
-  // регистрируем мини-нотацию, тональные хелперы, синты и эффекты в scope eval
+  // регистрируем мини-нотацию, тональные хелперы, синты, эффекты и draw в scope eval
   await evalScope(
     controls,
     import('@strudel/core'),
     import('@strudel/mini'),
     import('@strudel/tonal'),
+    import('@strudel/draw'),
     import('@strudel/webaudio'),
   );
 
   const ctx = getAudioContext();
   installMasterChain(ctx);
 
-  await registerSynthSounds();
-  // дефолтная библиотека ударных/сэмплов TidalCycles
-  await samples('github:tidalcycles/dirt-samples');
+  // ── prebake как на strudel.cc: синты + ZZFX + GM-саундфонты ──────────
+  await Promise.allSettled([
+    registerSynthSounds(),
+    registerZZFXSounds(),
+    registerSoundfonts(), // gm_* инструменты (грузятся лениво)
+  ]);
+
+  // ── дефолтные банки сэмплов (felixroos/dough-samples) ────────────────
+  // даёт .piano, tambourine, драм-машины (RolandTR909 и т.д.), инструменты VCSL.
+  // JSON содержат _base, поэтому второй аргумент не нужен. Грузятся манифесты
+  // (лёгкие), сами аудио-сэмплы подтягиваются лениво при первом использовании.
+  const ds = 'https://raw.githubusercontent.com/felixroos/dough-samples/main/';
+  await Promise.allSettled([
+    samples(ds + 'tidal-drum-machines.json'),
+    samples(ds + 'piano.json'),
+    samples(ds + 'Dirt-Samples.json'),
+    samples(ds + 'EmuSP12.json'),
+    samples(ds + 'vcsl.json'),
+    samples(ds + 'mridangam.json'),
+  ]);
 
   const r = repl({
     defaultOutput: makeOutput(),
