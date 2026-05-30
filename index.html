@@ -62,8 +62,8 @@
 
     /* правая колонка — рендер */
     .right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-    #stage { flex: 1; position: relative; background: #000; }
-    #gl { width: 100%; height: 100%; display: block; }
+    #stage { flex: 1; position: relative; background: #000; overflow: hidden; }
+    #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
     /* панель управления */
     .controls { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--panel); }
@@ -102,10 +102,14 @@
 
       main { flex-direction: column; }
 
-      /* 1) поле ввода кода — сверху */
+      /* 1) поле ввода кода — сверху, аккордеоном (тап по вкладке разворачивает) */
       .left { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--line); }
-      .editors { height: 38vh; }
+      .editors { flex: none; height: 0; overflow: hidden; transition: height .22s ease; }
+      .left.open .editors { height: 46vh; }
       .logpanel { height: 26vh; }
+      /* индикатор раскрытия на вкладках */
+      .tab::after { content: ' ▸'; opacity: .6; }
+      .left.open .tab.active::after { content: ' ▾'; }
 
       /* 2) «плеер» (рендер) — по центру */
       .right { width: 100%; }
@@ -127,7 +131,7 @@
   </header>
 
   <main>
-    <section class="left">
+    <section class="left" id="left">
       <div class="tabs">
         <button class="tab" id="tab-pattern">pattern.js</button>
         <button class="tab" id="tab-shader">shader.frag</button>

@@ -41,17 +41,45 @@ const loaded = loadFromHash() || defaultScene;
 const patternEd = createEditor(panePattern, loaded.pattern, 'js');
 const shaderEd = createEditor(paneShader, loaded.shader, 'glsl');
 
-// ---------- вкладки ----------
+// ---------- вкладки + мобильный аккордеон ----------
+const leftSection = $('left');
+const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
+
 function setTab(which) {
   const onPattern = which === 'pattern';
   panePattern.classList.toggle('hidden', !onPattern);
   paneShader.classList.toggle('hidden', onPattern);
   tabPattern.classList.toggle('active', onPattern);
   tabShader.classList.toggle('active', !onPattern);
+  // CodeMirror нужно пересчитать размеры после показа/ресайза контейнера
+  const ed = onPattern ? patternEd : shaderEd;
+  requestAnimationFrame(() => ed.view.requestMeasure());
 }
-tabPattern.onclick = () => setTab('pattern');
-tabShader.onclick = () => setTab('shader');
-setTab('pattern');
+
+let mobileOpen = false;
+function setOpen(open) {
+  mobileOpen = open;
+  leftSection.classList.toggle('open', open);
+  if (open) {
+    const ed = tabPattern.classList.contains('active') ? patternEd : shaderEd;
+    // после анимации раскрытия перемерить редактор
+    setTimeout(() => ed.view.requestMeasure(), 240);
+  }
+}
+
+function onTab(which) {
+  const tab = which === 'pattern' ? tabPattern : tabShader;
+  const wasActive = tab.classList.contains('active');
+  setTab(which);
+  if (isMobile()) {
+    // тап по уже активной вкладке сворачивает; иначе разворачивает
+    if (wasActive && mobileOpen) setOpen(false);
+    else setOpen(true);
+  }
+}
+tabPattern.onclick = () => onTab('pattern');
+tabShader.onclick = () => onTab('shader');
+setTab('pattern'); // на мобиле стартуем свёрнутыми (mobileOpen=false)
 
 // ---------- лог / дебаг ----------
 let debugOn = false;
