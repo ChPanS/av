@@ -44,8 +44,9 @@ const paneShader = $('pane-shader');
 
 // ---------- редакторы ----------
 const loaded = loadFromHash() || defaultScene;
-const patternEd = createEditor(panePattern, loaded.pattern, 'js');
-const shaderEd = createEditor(paneShader, loaded.shader, 'glsl');
+const runFromEditor = () => playBtn.click();
+const patternEd = createEditor(panePattern, loaded.pattern, 'js', runFromEditor);
+const shaderEd = createEditor(paneShader, loaded.shader, 'glsl', runFromEditor);
 
 // ---------- вкладки + мобильный аккордеон ----------
 const leftSection = $('left');
@@ -332,9 +333,12 @@ if (infoBtn && infoModal) {
   });
 }
 
-// ---------- хоткей: Ctrl/Cmd+Enter = play (как в Strudel) ----------
+// ---------- хоткей: Ctrl/Cmd+Enter = play (когда фокус НЕ в редакторе) ----------
+// Внутри редактора Mod-Enter обрабатывает сам CodeMirror (см. editor.js),
+// поэтому тут пропускаем, чтобы play не сработал дважды и не вставился перенос.
 window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if (document.activeElement && document.activeElement.closest('.cm-editor')) return;
     e.preventDefault();
     playBtn.click();
   }

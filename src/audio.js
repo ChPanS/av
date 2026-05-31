@@ -5,7 +5,7 @@
 //   2) обернуть аудио-вывод и дополнительно дёргать визуальный колбэк
 //      РОВНО в момент звучания (через deadline), а не с упреждением.
 
-import { repl, evalScope, controls, register, Pattern } from '@strudel/core';
+import { repl, evalScope, controls, register, Pattern, createParams } from '@strudel/core';
 import * as strudelCore from '@strudel/core';
 import * as strudelMini from '@strudel/mini';
 import * as strudelTonal from '@strudel/tonal';
@@ -131,11 +131,17 @@ function registerSoundsAsMethods() {
 export async function initAudio() {
   if (initialized) return;
 
+  // кастомный пасс-тру контрол .vis("...") — пользователь сам помечает группу
+  // визуала (kick/snare/hat/pad/bass/lead). Звука не меняет, просто кладёт
+  // значение в hap.value.vis, которое читает bridge.js.
+  const visParams = createParams('vis');
+
   // регистрируем мини-нотацию, тональные хелперы, синты, эффекты и draw в scope eval
   // (статические namespace-импорты, чтобы не было предупреждений о смешении
   //  динамического и статического импорта)
   await evalScope(
     controls,
+    visParams,
     strudelCore,
     strudelMini,
     strudelTonal,

@@ -222,6 +222,20 @@
       </ul>
       <p class="dim">Пример: <code>floor(uBeat)</code> даёт номер такта — можно менять
       сцену по тактам; <code>uLoop</code> хорош для плавных переходов через весь луп.</p>
+
+      <h3>Группировка звуков для визуала — <code>.vis()</code></h3>
+      <p>Движок угадывает тип звука по имени (bd→kick, hh→hat, синты→pad). Если
+      грузишь свои сэмплы и хочешь точно управлять, помечай дорожку тегом:
+      <code>s("mysample").vis("kick")</code>. Доступные группы:
+      <code>kick</code>, <code>snare</code>, <code>hat</code>, <code>pad</code>,
+      <code>bass</code>, <code>lead</code>. Явный тег важнее автоугадывания.</p>
+
+      <h3>Клавиши в редакторе</h3>
+      <ul class="uni">
+        <li><code>Ctrl/Cmd + Enter</code> — запустить / обновить</li>
+        <li><code>Tab</code> — принять автокомплит или сделать отступ</li>
+        <li><code>Shift + Tab</code> — убрать отступ</li>
+      </ul>
     </div>
   </div>
 
