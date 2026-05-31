@@ -112,6 +112,11 @@
     .modal-box .dim { color: var(--dim); }
     .modal-close { position: absolute; top: 14px; right: 14px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 14px; }
     .modal-close:hover { border-color: var(--accent); }
+    .modal-box.warn { border-color: var(--accent); }
+    .modal-box .ack { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--dim); margin: 16px 0; cursor: pointer; }
+    .modal-box .ack input { accent-color: var(--accent); width: 16px; height: 16px; }
+    button.ctl.accept { width: 100%; padding: 13px; color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+    #epilepsy { z-index: 200; }
 
     @media (max-width: 820px) {
       body { overflow-y: auto; }
@@ -183,6 +188,37 @@
       </div>
     </section>
   </main>
+
+  <div class="modal hidden" id="epilepsy">
+    <div class="modal-box warn">
+      <h2>⚠ Предупреждение и условия использования</h2>
+
+      <h3>Фоточувствительность</h3>
+      <p>Этот сайт показывает анимацию с мерцанием, контрастными вспышками и быстро
+      меняющимися цветами, синхронизированную с музыкой. В редких случаях подобное
+      может вызвать дискомфорт или приступ у людей с фоточувствительной эпилепсией.
+      Если у тебя или у кого-то рядом бывали такие реакции — не продолжай или смотри
+      с осторожностью: на расстоянии от экрана, в хорошо освещённой комнате, с перерывами.</p>
+
+      <h3>Исполнение кода и ответственность</h3>
+      <p>Сервис предоставляет среду для написания и исполнения пользовательского кода,
+      включая код на языке JavaScript (через Strudel) и шейдеры на языке GLSL. Код
+      исполняется локально в браузере пользователя. Пользователь самостоятельно и под
+      свою полную ответственность принимает решение о запуске любого кода — как
+      введённого им самостоятельно, так и полученного из внешних источников, в том
+      числе по ссылкам, которыми поделились третьи лица.</p>
+      <p>Сервис предоставляется на условиях «как есть» (as is) и «по мере доступности»
+      (as available), без каких-либо гарантий, явных или подразумеваемых. Администрация
+      сервиса не несёт ответственности за любой прямой или косвенный ущерб, утрату
+      данных, сбои в работе устройства или иные последствия, возникшие в результате
+      использования сервиса и (или) исполнения любого кода.</p>
+      <p>Продолжая использование сервиса, пользователь подтверждает, что ознакомлен с
+      настоящим уведомлением, согласен с ним и принимает указанные риски на себя.</p>
+
+      <label class="ack"><input type="checkbox" id="epi-remember" checked> Больше не показывать на этом устройстве</label>
+      <button class="ctl accept" id="epi-ok">Принимаю, продолжить</button>
+    </div>
+  </div>
 
   <div class="modal hidden" id="infomodal">
     <div class="modal-box">

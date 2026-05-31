@@ -146,11 +146,37 @@ function reportError(prefix, e) {
   full.split('\n').forEach((l) => l.trim() && log('  ' + l, 'err'));
 }
 
-// ---------- рендер сразу (без звука) ----------
+// ---------- рендер: за предупреждением об эпилепсии ----------
 initRenderer(canvas);
 setClockProvider(getClock);   // uBeat/uLoop/uBeatFrac берутся из часов лупа
 applyShader(true);
-startRenderLoop();
+// startRenderLoop() вызывается только после согласия (см. ниже)
+
+const EPI_KEY = 'av-gate-ack-v2'; // версия повышается при изменении текста уведомления
+const epiModal = $('epilepsy');
+const epiOk = $('epi-ok');
+const epiRemember = $('epi-remember');
+
+function hasEpiConsent() {
+  try { return localStorage.getItem(EPI_KEY) === '1'; } catch (e) { return false; }
+}
+
+// если согласие уже сохранено — стартуем сразу; иначе показываем предупреждение
+if (hasEpiConsent()) {
+  startRenderLoop();
+} else {
+  epiModal.classList.remove('hidden');
+}
+
+if (epiOk) {
+  epiOk.onclick = () => {
+    if (epiRemember && epiRemember.checked) {
+      try { localStorage.setItem(EPI_KEY, '1'); } catch (e) {}
+    }
+    epiModal.classList.add('hidden');
+    startRenderLoop();
+  };
+}
 
 // компиляция шейдера из редактора; true = успех
 function applyShader(silent = false) {
