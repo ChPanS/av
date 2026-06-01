@@ -60,7 +60,7 @@ function compile(type, src) {
 export function initRenderer(canvasEl) {
   canvas = canvasEl;
   gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true });
-  if (!gl) throw new Error('WebGL2 не поддерживается этим браузером');
+  if (!gl) throw new Error('WebGL2 is not supported by your browser');
 
   // полноэкранный квад
   const quad = new Float32Array([-1, -1, 3, -1, -1, 3]); // большой треугольник

@@ -169,7 +169,7 @@
 <body>
   <header>
     <span class="mark">av<b>·</b>livecoding</span>
-    <span class="sub">strudel + webgl · pattern → sound &amp; pixels</span>
+    <span class="sub">strudel + webgl · music → visuals</span>
   </header>
 
   <main>
@@ -202,33 +202,33 @@
         <button class="ctl" id="info">? help</button>
         <label class="vol"><span>vol</span><input type="range" id="volume" min="0" max="100" value="50"></label>
         <span class="spacer"></span>
-        <span id="status">нажми play (Ctrl+Enter)</span>
+        <span id="status">press play (Ctrl+Enter)</span>
       </div>
     </section>
   </main>
 
   <div class="modal hidden" id="epilepsy">
     <div class="modal-box warn">
-      <h2>⚠ Предупреждение и условия использования</h2>
+      <h2>⚠ Disclaimer</h2>
 
-      <h3>Фоточувствительность</h3>
+      <h3>Photosensitivity</h3>
       <p>
-      Сервис может содержать анимации с мерцанием и резкими изменениями цветов, что в редких случаях может вызывать дискомфорт или реакции у людей с фоточувствительностью/эпилепсией. При наличии подобных особенностей рекомендуется соблюдать осторожность или прекратить использование.
-      </p>
-
-      <h3>Ответственность за исполнение кода</h3>
-      <p>
-      Сервис предоставляет среду для выполнения пользовательского кода (JavaScript/Strudel, GLSL), исполняемого локально в браузере. Пользователь самостоятельно несёт ответственность за запуск любого кода, включая сторонний.
-      </p>
-      <p>
-      Сервис предоставляется «as is» и без гарантий. Администрация не несёт ответственности за возможный ущерб, потерю данных или сбои, связанные с использованием сервиса или выполнением кода.
-      </p>
-      <p>
-      Используя сервис, пользователь подтверждает согласие с данными условиями и принимает связанные риски.
+      The service may contain animations with flickering and abrupt color changes, which in rare cases may cause discomfort or reactions in people with photosensitivity/epilepsy. If you have such conditions, it is recommended to exercise caution or discontinue use.
       </p>
 
-      <label class="ack"><input type="checkbox" id="epi-remember" checked> Больше не показывать на этом устройстве</label>
-      <button class="ctl accept" id="epi-ok">Принимаю, продолжить</button>
+      <h3>Code Execution Liability</h3>
+      <p>
+      The service provides an environment for executing user code (JavaScript/Strudel, GLSL), which runs locally in the browser. The user bears sole responsibility for running any code, including third-party code.
+      </p>
+      <p>
+      Сhe service is provided "as is" without warranties. The administration takes no responsibility for any damage, data loss, or failures related to the use of the service or code execution.
+      </p>
+      <p>
+      By using the service, you confirm agreement with these terms and accept the associated risks.
+      </p>
+
+      <label class="ack"><input type="checkbox" id="epi-remember" checked> Do not show again</label>
+      <button class="ctl accept" id="epi-ok">I accept, continue</button>
     </div>
   </div>
 
@@ -236,55 +236,54 @@
     <div class="modal-box">
       <button class="modal-close" id="infoclose">✕</button>
       <h2>av · livecoding</h2>
-      <p>Слева пишешь <b>музыку</b> на Strudel и <b>шейдер</b> на GLSL. Кнопка
-      <b>play / update</b> применяет код вживую (или <b>Ctrl/Cmd+Enter</b>),
-      <b>stop</b> — глушит, <b>share</b> — пишет видео-клип длиной в целое число
-      циклов, <b>link</b> — копирует ссылку со сценой, <b>vol</b> — общая громкость.</p>
+      <p>In pattern.js you write <b>music</b> in Strudel and <b>shaders</b> in GLSL. The
+      <b>play / update</b> button applies the code live (or <b>Ctrl/Cmd+Enter</b>),
+      <b>stop</b> — silences, <b>share</b> — records video up to a minute, <b>link</b> — lets you share the scene (beta), <b>vol</b> — master volume.</p>
 
-      <h3>Музыка — Strudel</h3>
-      <p>Паттерны в мини-нотации: <code>s("bd*4")</code>, аккорды, эффекты, <code>arrange()</code>.
-      Полный туториал и справка: <a href="https://strudel.cc/learn" target="_blank" rel="noopener">strudel.cc/learn</a>.
-      Длину лупа для <code>uBeat</code> можно задать комментарием <code>// loop: N</code>
-      в начале паттерна (по умолчанию 24).</p>
+      <h3>Music — Strudel</h3>
+      <p>Patterns in mini-notation: <code>s("bd*4")</code>, chords, effects, <code>arrange()</code>.
+      Full tutorial and reference: <a href="https://strudel.cc/learn" target="_blank" rel="noopener">strudel.cc/learn</a>.
+      The loop length for <code>uBeat</code> can be set with the comment <code>// loop: N</code>
+      at the beginning of the pattern (default 24).</p>
 
-      <h3>Как работает шейдер</h3>
-      <p>Ты пишешь функцию <code>mainImage(out vec4 fragColor, in vec2 fragCoord)</code> —
-      она выполняется для каждого пикселя и возвращает его цвет. Движок прокидывает
-      туда «ручки» (uniforms), которые движутся под музыку. Введение в GLSL:
-      <a href="https://thebookofshaders.com" target="_blank" rel="noopener">thebookofshaders.com</a>.</p>
+      <h3>How the shader works</h3>
+      <p>You write a <code>mainImage(out vec4 fragColor, in vec2 fragCoord)</code> function —
+      it runs for every pixel and returns its color. The engine passes in
+      uniforms that change based on information from Strudel. Inspired by:
+      <a href="https://www.shadertoy.com/" target="_blank" rel="noopener">shadertoy.com</a>.</p>
 
-      <h3>Доступные uniforms</h3>
+      <h3>Available uniforms</h3>
       <ul class="uni">
-        <li><code>vec2 uResolution</code> — размер кадра в пикселях</li>
-        <li><code>float uTime</code> — секунды с запуска (непрерывно растёт)</li>
-        <li><code>float uKick</code> — импульс бочки (всплеск к 1, затухает)</li>
-        <li><code>float uSnare</code> — импульс снейра/клэпа</li>
-        <li><code>float uHat</code> — импульс хэтов</li>
-        <li><code>float uPitch</code> — высота последней ноты в октаве, 0..1</li>
-        <li><code>float uHue</code> — оттенок, плавно ведётся за гармонией, 0..1</li>
-        <li><code>float uEnergy</code> — плотность/громкость потока, 0..1 (прокси «интро↔дроп»)</li>
-        <li><code>float uPad</code> — сустейн гармонических синтов (пэд), мягкая огибающая</li>
-        <li><code>float uBeat</code> — позиция в лупе в циклах: 0..N; <code>floor(uBeat)</code> = номер такта</li>
-        <li><code>float uLoop</code> — позиция в лупе нормированная 0..1 (сбрасывается в 0 на конце)</li>
-        <li><code>float uBeatFrac</code> — фаза внутри текущего цикла, 0..1</li>
+        <li><code>vec2 uResolution</code> — frame size in pixels</li>
+        <li><code>float uTime</code> — seconds since launch (continuously increases)</li>
+        <li><code>float uKick</code> — kick drum impulse (spikes to 1, decays)</li>
+        <li><code>float uSnare</code> — snare/clap impulse</li>
+        <li><code>float uHat</code> — hat impulse</li>
+        <li><code>float uPitch</code> — pitch of the last note in octave, 0..1</li>
+        <li><code>float uHue</code> — hue, smoothly follows the harmony, 0..1</li>
+        <li><code>float uEnergy</code> — density/loudness of the stream, 0..1 (proxy for "intro↔drop")</li>
+        <li><code>float uPad</code> — sustain of harmonic synths (pad), soft envelope</li>
+        <li><code>float uBeat</code> — position in the loop in cycles: 0..N; <code>floor(uBeat)</code> = bar number</li>
+        <li><code>float uLoop</code> — position in the loop normalized 0..1 (resets to 0 at the end)</li>
+        <li><code>float uBeatFrac</code> — phase within the current cycle, 0..1</li>
       </ul>
-      <p class="dim">Пример: <code>floor(uBeat)</code> даёт номер такта — можно менять
-      сцену по тактам; <code>uLoop</code> хорош для плавных переходов через весь луп.</p>
+      <p class="dim">Example: <code>floor(uBeat)</code> gives the bar number — you can change
+      the scene by bars; <code>uLoop</code> is good for smooth transitions across the entire loop.</p>
 
-      <h3>Группировка звуков для визуала — <code>.vis()</code></h3>
-      <p>Движок угадывает тип звука по имени (bd→kick, hh→hat, синты→pad). Чтобы управлять
-      точно (особенно своими сэмплами), помечай дорожку тегом: <code>s("mysample").vis("kick")</code>.
-      Группы: ударные — <code>kick</code>, <code>snare</code>, <code>clap</code>,
-      <code>hat</code>, <code>oh</code>; инструменты — <code>pad</code>, <code>atmosphere</code>,
+      <h3>Grouping sounds for visuals — <code>.vis()</code></h3>
+      <p>The engine guesses the sound type by name (bd→kick, hh→hat, synths→pad). For precise
+      control (especially with your own samples), tag the track: <code>s("mysample").vis("kick")</code>.
+      Groups: drums — <code>kick</code>, <code>snare</code>, <code>clap</code>,
+      <code>hat</code>, <code>oh</code>; instruments — <code>pad</code>, <code>atmosphere</code>,
       <code>key</code>, <code>lead</code>, <code>bass</code>, <code>arp</code>, <code>fx</code>,
-      <code>vox</code>. У инструментов два юниформа: <code>u…Vel</code> (велосити, плавно
-      гаснет) и <code>u…Pitch</code> (высота ноты). Явный тег важнее автоугадывания.</p>
+      <code>vox</code>. Instruments have two uniforms: <code>u…Vel</code> (velocity, smoothly
+      decays) and <code>u…Pitch</code> (note pitch). An explicit tag overrides auto-detection.</p>
 
-      <h3>Клавиши в редакторе</h3>
+      <h3>Editor shortcuts</h3>
       <ul class="uni">
-        <li><code>Ctrl/Cmd + Enter</code> — запустить / обновить</li>
-        <li><code>Tab</code> — принять автокомплит или сделать отступ</li>
-        <li><code>Shift + Tab</code> — убрать отступ</li>
+        <li><code>Ctrl/Cmd + Enter</code> — run / update</li>
+        <li><code>Tab</code> — accept autocomplete or indent</li>
+        <li><code>Shift + Tab</code> — outdent</li>
       </ul>
     </div>
   </div>

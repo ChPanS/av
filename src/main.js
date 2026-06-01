@@ -139,7 +139,7 @@ document.addEventListener('strudel.log', (e) => {
 // которые происходят уже после нажатия play.
 setStateCallback((state) => {
   if (state.schedulerError) {
-    reportError('Ошибка во время игры', state.schedulerError);
+    reportError('An error occured while playing', state.schedulerError);
   }
 });
 
@@ -192,10 +192,10 @@ if (epiOk) {
 function applyShader(silent = false) {
   const err = loadShader(shaderEd.get());
   if (err) {
-    reportError('Ошибка шейдера', new Error(err));
+    reportError('Shader error', new Error(err));
     return false;
   }
-  if (!silent) log('shader скомпилирован', 'ok');
+  if (!silent) log('shader compiled', 'ok');
   return true;
 }
 
@@ -240,12 +240,12 @@ playBtn.onclick = async () => {
     playBtn.disabled = true;
 
     if (!isInitialized()) {
-      setStatus('инициализация звука, загрузка сэмплов…');
-      log('initAudio: загрузка сэмплов…', 'info');
+      setStatus('sound initialization, loading samples…');
+      log('initAudio: loading samples…', 'info');
       await initAudio();
       setHapCallbackSafe();
       setMasterVolume((volSlider?.value ?? 50) / 100); // применяем громкость слайдера
-      log('audio готов', 'ok');
+      log('audio ready', 'ok');
     }
 
     // 1) шейдер
@@ -266,7 +266,7 @@ playBtn.onclick = async () => {
     const st = getState();
     if (st.evalError) {
       // ошибка уже улетела в лог через 'strudel.log'; дублируем в статус крупно
-      reportError('Код не запущен (ошибка Strudel)', st.evalError);
+      reportError('Code is nor running (Strudel error)', st.evalError);
       return; // НЕ стартуем — играет прежний валидный паттерн (или тишина)
     }
 
@@ -277,10 +277,10 @@ playBtn.onclick = async () => {
     }
 
     const cps = getCps();
-    setStatus('играет · обновлено · cps ' + cps.toFixed(2));
-    log('pattern применён · cps ' + cps.toFixed(2), 'ok');
+    setStatus('playing · updated · cps ' + cps.toFixed(2));
+    log('pattern updated · cps ' + cps.toFixed(2), 'ok');
   } catch (e) {
-    reportError('Ошибка в паттерне', e);
+    reportError('Pattern error', e);
   } finally {
     playBtn.disabled = false;
   }
@@ -290,7 +290,7 @@ playBtn.onclick = async () => {
 stopBtn.onclick = () => {
   stop();
   started = false;
-  setStatus('остановлено');
+  setStatus('stopped');
   log('stop', 'info');
 };
 
@@ -304,47 +304,47 @@ fsBtn.onclick = () => {
 // ---------- SHARE: видео по циклам ----------
 shareBtn.onclick = async () => {
   if (!started) {
-    setStatus('сначала нажми play — нужно играющее аудио', true);
+    setStatus('press play first — playing audio is needed', true);
     return;
   }
   const cps = getCps();
   const { seconds, cycles } = computeClipDuration(cps, 60);
   try {
     shareBtn.disabled = true;
-    log(`запись клипа: ${seconds.toFixed(1)}с, ${Math.round(cycles)} циклов`, 'info');
-    setStatus(`запись ${seconds.toFixed(1)}с (${Math.round(cycles)} циклов)…`);
+    log(`making clip: ${seconds.toFixed(1)}с, ${Math.round(cycles)} cycles`, 'info');
+    setStatus(`recording ${seconds.toFixed(1)}с (${Math.round(cycles)} cycles)…`);
     const blob = await recordClip({
       canvas: getCanvas(),
       audioStream: getRecorderStream(),
       durationSec: seconds,
       fps: 60,
-      onProgress: (p) => setStatus(`запись… ${Math.round(p * 100)}%`),
+      onProgress: (p) => setStatus(`recording… ${Math.round(p * 100)}%`),
     });
     // нативный mp4 (Safari/новые Chrome) -> отдаём сразу, без конвертации
     if (blob.type.includes('mp4')) {
       downloadBlob(blob, 'av-clip.mp4');
-      setStatus('готово — mp4 скачан');
-      log('клип готов (нативный mp4, ' + (blob.size / 1024 / 1024).toFixed(1) + ' МБ)', 'ok');
+      setStatus('ready — mp4 downloaded');
+      log('clip is ready (native mp4, ' + (blob.size / 1024 / 1024).toFixed(1) + ' МБ)', 'ok');
     } else {
       // webm -> конвертируем в mp4 через ffmpeg.wasm (ленивая загрузка ~31МБ)
-      setStatus('конвертация webm → mp4 (первый раз грузит ~31МБ ядро)…');
-      log('конвертация webm → mp4 через ffmpeg.wasm…', 'info');
+      setStatus('converting webm → mp4 (loading ~31MB core)…');
+      log('converting webm → mp4 with ffmpeg.wasm…', 'info');
       try {
         const mp4 = await convertWebmToMp4(blob, {
-          onProgress: (p) => setStatus('конвертация… ' + Math.round(p * 100) + '%'),
+          onProgress: (p) => setStatus('converting… ' + Math.round(p * 100) + '%'),
           onLog: (m) => { if (debugOn) log('[ffmpeg] ' + m, 'cmd'); },
         });
         downloadBlob(mp4, 'av-clip.mp4');
-        setStatus('готово — mp4 скачан');
-        log('mp4 готов (' + (mp4.size / 1024 / 1024).toFixed(1) + ' МБ)', 'ok');
+        setStatus('ready — mp4 downloaded');
+        log('mp4 ready (' + (mp4.size / 1024 / 1024).toFixed(1) + ' MB)', 'ok');
       } catch (convErr) {
         // если конвертация упала (память/сеть на слабом устройстве) — отдаём webm
-        reportError('Конвертация не удалась, отдаю webm', convErr);
+        reportError('Convertating failed, giving webm', convErr);
         downloadBlob(blob, 'av-clip.webm');
       }
     }
   } catch (e) {
-    reportError('Запись не удалась', e);
+    reportError('Making clip failed', e);
   } finally {
     shareBtn.disabled = false;
   }
@@ -357,9 +357,9 @@ linkBtn.onclick = async () => {
   const url = location.origin + location.pathname + '#' + hash;
   try {
     await navigator.clipboard.writeText(url);
-    setStatus('ссылка на сцену скопирована');
+    setStatus('copied link');
   } catch {
-    setStatus('ссылка в адресной строке');
+    setStatus('link in url');
     location.hash = hash;
   }
 };
@@ -369,7 +369,7 @@ if (volSlider) {
   volSlider.value = 50; // дефолт 50%
   volSlider.addEventListener('input', () => {
     setMasterVolume(volSlider.value / 100); // no-op пока audio не инициализирован
-    setStatus('громкость ' + volSlider.value + '%');
+    setStatus('volume ' + volSlider.value + '%');
   });
 }
 
