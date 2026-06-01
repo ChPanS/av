@@ -44,7 +44,17 @@
     header .mark b { color: var(--accent); }
     header .sub { color: var(--dim); font-size: 11px; }
 
-    main { flex: 1; display: flex; min-height: 0; }
+    main { flex: 1; display: flex; min-height: 0; position: relative; }
+
+    /* ── задел под полноэкранный «оверлей»: редактор поверх рендера ──
+       включается классом .overlay-mode на <main> (см. setEditorOverlay в main.js).
+       Подсветка нот и редактор работают те же самые — просто всплывают поверх. */
+    main.overlay-mode .left {
+      position: absolute; inset: 0; z-index: 50; width: 100%;
+      border: none; background: rgba(5, 6, 8, 0.5); backdrop-filter: blur(3px);
+    }
+    main.overlay-mode .left .editors { height: 100% !important; }
+    main.overlay-mode .logpanel { display: none; }
 
     /* левая колонка — редакторы */
     .left { width: 46%; min-width: 340px; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
@@ -144,6 +154,14 @@
       .controls .spacer { display: none; }
       button.ctl { flex: 1 1 auto; min-width: calc(50% - 6px); padding: 12px 10px; font-size: 13px; text-align: center; }
       #play { min-width: calc(50% - 6px); }
+      /* vol — такой же бокс-ячейка, как кнопки, чтобы нижний ряд был ровным */
+      .controls .vol {
+        flex: 1 1 auto; min-width: calc(50% - 6px); box-sizing: border-box;
+        justify-content: center; padding: 10px; gap: 8px;
+        border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2);
+        font-size: 13px;
+      }
+      .controls .vol input[type=range] { flex: 1; width: auto; min-width: 0; }
       #status { width: 100%; max-width: none; text-align: left; order: 99; padding: 6px 2px 0; }
     }
   </style>
@@ -260,11 +278,13 @@
       сцену по тактам; <code>uLoop</code> хорош для плавных переходов через весь луп.</p>
 
       <h3>Группировка звуков для визуала — <code>.vis()</code></h3>
-      <p>Движок угадывает тип звука по имени (bd→kick, hh→hat, синты→pad). Если
-      грузишь свои сэмплы и хочешь точно управлять, помечай дорожку тегом:
-      <code>s("mysample").vis("kick")</code>. Доступные группы:
-      <code>kick</code>, <code>snare</code>, <code>hat</code>, <code>pad</code>,
-      <code>bass</code>, <code>lead</code>. Явный тег важнее автоугадывания.</p>
+      <p>Движок угадывает тип звука по имени (bd→kick, hh→hat, синты→pad). Чтобы управлять
+      точно (особенно своими сэмплами), помечай дорожку тегом: <code>s("mysample").vis("kick")</code>.
+      Группы: ударные — <code>kick</code>, <code>snare</code>, <code>clap</code>,
+      <code>hat</code>, <code>oh</code>; инструменты — <code>pad</code>, <code>atmosphere</code>,
+      <code>key</code>, <code>lead</code>, <code>bass</code>, <code>arp</code>, <code>fx</code>,
+      <code>vox</code>. У инструментов два юниформа: <code>u…Vel</code> (велосити, плавно
+      гаснет) и <code>u…Pitch</code> (высота ноты). Явный тег важнее автоугадывания.</p>
 
       <h3>Клавиши в редакторе</h3>
       <ul class="uni">

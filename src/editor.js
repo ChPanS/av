@@ -11,9 +11,12 @@ import { acceptCompletion } from '@codemirror/autocomplete';
 import { javascript } from '@codemirror/lang-javascript';
 import { cpp } from '@codemirror/lang-cpp';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { highlightField, highlightTheme } from './highlight.js';
 
 export function createEditor(parent, doc, kind /* 'js' | 'glsl' */, onRun) {
   const lang = kind === 'glsl' ? cpp() : javascript();
+  // подсветка играющих нот — только для редактора паттерна (js)
+  const hl = kind === 'glsl' ? [] : [highlightField, highlightTheme];
 
   // высокий приоритет, чтобы перебить дефолтные Enter/Tab
   const runKeys = Prec.highest(
@@ -37,6 +40,7 @@ export function createEditor(parent, doc, kind /* 'js' | 'glsl' */, onRun) {
       basicSetup,
       lang,
       oneDark,
+      ...hl,
       indentUnit.of('  '),       // отступ 2 пробела
       EditorView.theme({
         '&': { height: '100%', fontSize: '13px' },

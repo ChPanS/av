@@ -17,6 +17,7 @@ import {
 } from './audio.js';
 import { initRenderer, loadShader, startRenderLoop, getCanvas, setClockProvider } from './renderer.js';
 import { handleHap } from './bridge.js';
+import { createHighlighter } from './highlight.js';
 import { createEditor } from './editor.js';
 import { computeClipDuration, recordClip, downloadBlob } from './recorder.js';
 import { convertWebmToMp4 } from './mp4.js';
@@ -47,6 +48,15 @@ const loaded = loadFromHash() || defaultScene;
 const runFromEditor = () => playBtn.click();
 const patternEd = createEditor(panePattern, loaded.pattern, 'js', runFromEditor);
 const shaderEd = createEditor(paneShader, loaded.shader, 'glsl', runFromEditor);
+const highlighter = createHighlighter(patternEd.view); // подсветка играющих нот
+
+// Задел под будущую кнопку «совмещение»: кладёт редактор (с подсветкой) поверх
+// рендера. Сейчас не привязано к кнопке — вызывать setEditorOverlay(true/false).
+// Для полноэкранного режима кнопка дополнительно дёрнет requestFullscreen на #stage.
+function setEditorOverlay(on) {
+  document.querySelector('main')?.classList.toggle('overlay-mode', !!on);
+}
+window.__setEditorOverlay = setEditorOverlay; // временный доступ для теста из консоли
 
 // ---------- вкладки + мобильный аккордеон ----------
 const leftSection = $('left');
@@ -195,6 +205,19 @@ setHapCallbackSafe();
 function setHapCallbackSafe() {
   setHapCallback((hap) => {
     handleHap(hap);
+    // подсветка играющих нот: зажигаем позиции в коде на длительность ноты
+    const locs = hap?.context?.locations;
+    if (locs) {
+      let holdMs = 140;
+      try {
+        const b = hap.whole?.begin, e = hap.whole?.end;
+        const bc = typeof b?.valueOf === 'function' ? b.valueOf() : b;
+        const ec = typeof e?.valueOf === 'function' ? e.valueOf() : e;
+        const cps = getCps() || 0.5;
+        if (isFinite(bc) && isFinite(ec) && ec > bc) holdMs = ((ec - bc) / cps) * 1000;
+      } catch (e) {}
+      highlighter.light(locs, holdMs);
+    }
     if (debugOn) {
       const v = hap?.value ?? {};
       const s = v.s ?? v.sound ?? '';

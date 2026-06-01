@@ -20,23 +20,19 @@ in vec2 a_pos;
 void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 `;
 
+function uniformDecls() {
+  // объявления генерируются из объекта uniforms — добавил канал в bridge.js,
+  // он автоматически объявлен здесь. Все скалярные каналы — float, uResolution — vec2.
+  let s = 'uniform vec2  uResolution;\n';
+  for (const k of Object.keys(uniforms)) s += `uniform float ${k};\n`;
+  return s;
+}
+
 function fragWrapper(userBody) {
   return `#version 300 es
 precision highp float;
 
-uniform vec2  uResolution;
-uniform float uTime;
-uniform float uKick;
-uniform float uSnare;
-uniform float uHat;
-uniform float uPitch;
-uniform float uHue;
-uniform float uEnergy;
-uniform float uPad;
-uniform float uBeat;
-uniform float uLoop;
-uniform float uBeatFrac;
-
+${uniformDecls()}
 out vec4 outColor;
 
 ${userBody}
@@ -146,17 +142,12 @@ function frame() {
     gl.bindVertexArray(vao);
 
     gl.uniform2f(uLoc.uResolution, canvas.width, canvas.height);
-    gl.uniform1f(uLoc.uTime, uniforms.uTime);
-    gl.uniform1f(uLoc.uKick, uniforms.uKick);
-    gl.uniform1f(uLoc.uSnare, uniforms.uSnare);
-    gl.uniform1f(uLoc.uHat, uniforms.uHat);
-    gl.uniform1f(uLoc.uPitch, uniforms.uPitch);
-    gl.uniform1f(uLoc.uHue, uniforms.uHue);
-    gl.uniform1f(uLoc.uEnergy, uniforms.uEnergy);
-    gl.uniform1f(uLoc.uPad, uniforms.uPad);
-    gl.uniform1f(uLoc.uBeat, uniforms.uBeat);
-    gl.uniform1f(uLoc.uLoop, uniforms.uLoop);
-    gl.uniform1f(uLoc.uBeatFrac, uniforms.uBeatFrac);
+    // все скалярные каналы — одним циклом (null-локации инактивных юниформов
+    // WebGL молча игнорирует, так что неиспользуемые в шейдере каналы безвредны)
+    for (const k of Object.keys(uniforms)) {
+      const loc = uLoc[k];
+      if (loc !== null && loc !== undefined) gl.uniform1f(loc, uniforms[k]);
+    }
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
