@@ -1,71 +1,61 @@
 # av · livecoding
 
-Локальная платформа аудиовизуального ливкодинга: **Strudel** (алгоритмическая музыка)
-управляет **WebGL-шейдером** не по громкости, а по событиям паттерна (бочка, снейр, нота).
-Гибрид: дефолтная сцена грузится из файла, но прямо на странице есть редакторы
-паттерна и шейдера, кнопка Play, фуллскрин и запись клипа.
+An audiovisual livecoding platform where **Strudel** drives a **WebGL shader** — not
+by audio volume, but by pattern events (kick, snare, note triggers). A default scene
+loads from a file, and both the pattern and shader editors are available directly on the page.
 
-## Запуск локально
+## Running Locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Открой `http://localhost:5173`, жми **play** (первый клик инициализирует звук —
-это требование браузеров, не баг). Правь код в редакторах и снова жми play —
-изменения применяются вживую.
+Open http://localhost:5173 and press play (the first click initializes audio —
+a browser requirement). Edit the code in either editor and press play again —
+changes take effect immediately.
 
-## Что где
-
+## Project Structure
 ```
 src/
-  main.js            точка входа: вкладки, Play/Stop, fullscreen, share, URL-шеринг
-  audio.js           обёртка Strudel: repl, кастомный вывод + визуальный колбэк, cps, аудио-тап
-  bridge.js          СЕРДЦЕ: маппинг событий паттерна -> юниформы шейдера. Тут твоя логика.
-  renderer.js        WebGL2: компиляция шейдера, цикл рендера, юниформы (движок, не трогаешь)
-  recorder.js        запись canvas+аудио в .webm, длина = чётное число циклов
-  editor.js          CodeMirror (паттерн + шейдер)
-  scenes/default.js  дефолтная сцена { pattern, shader } — формат твоего контента
+  main.js            Entry point: tabs, Play/Stop, fullscreen, share, URL sharing
+  audio.js           Strudel wrapper: repl, custom output + visual callback, cps, audio tap
+  bridge.js          CORE: maps pattern events → shader uniforms. Your logic lives here.
+  renderer.js        WebGL2: shader compilation, render loop, uniforms (engine, don't touch)
+  recorder.js        Canvas + audio recording to .webm, length = even number of cycles
+  editor.js          CodeMirror (pattern + shader)
+  scenes/default.js  Default scene { pattern, shader }
 ```
+The engine modules (audio, renderer, recorder, editor) rarely need
+modification. Creative work happens in scenes/ and bridge.js.
 
-Движок (`audio/renderer/recorder/editor`) трогать почти не нужно.
-Творчество живёт в `scenes/` и в `bridge.js`.
-
-## Юниформы, доступные в шейдере
-
-`uResolution` (vec2), `uTime`, `uKick`, `uSnare`, `uHat`, `uPitch` (0..1),
-`uHue` (0..1), `uEnergy` (0..1). Импульсы (`uKick` и т.п.) скачут к 1.0 в момент
-звука и плавно затухают (коэффициенты — в `bridge.js`).
-
-Хочешь больше каналов (например, отдельный юниформ под мелодию) — добавь поле
-в `uniforms` в `bridge.js`, его декей, маршрутизацию в `handleHap`, и объяви
-юниформ в обёртке шейдера в `renderer.js`.
-
-## Деплой
-
-```bash
-npm run build      # -> dist/ (статика)
+## Adding Custom Uniforms
 ```
+To add more channels (e.g., a dedicated uniform for melody):
+Add the field to the uniforms object in bridge.js
+Define its decay behavior
+Route it in handleHap
+Declare the uniform in the shader wrapper in renderer.js
+```
+## Sound Grouping for Visuals — .vis()
 
-Заливаешь `dist/` на любой статический хостинг: Vercel / Netlify / Cloudflare Pages /
-GitHub Pages. Бэкенд не нужен.
+The engine auto-detects sound types by name (bd → kick, hh → hat,
+synths → pad). For precise control (especially with custom samples), tag
+tracks explicitly: s("mysample").vis("kick")
 
-## ⚠️ Запись видео (share) — самая хрупкая часть
+Drum groups: kick, snare, clap, hat, oh
+Instrument groups: pad, atmosphere, key, lead, bass, arp, fx, vox
 
-- Формат вывода — **.webm** (MediaRecorder в большинстве браузеров не умеет mp4).
-  При необходимости конвертируй потом через ffmpeg.
-- Аудио для записи мы получаем, зеркаля аудиограф Strudel в `MediaStreamDestination`
-  (патч `AudioNode.connect` в `audio.js`). У superdough нет публичного мастер-выхода,
-  так что если в новой версии Strudel запись окажется без звука — смотри
-  `installRecorderTap()`; возможно, изменилась схема подключения к `ctx.destination`.
-- Запись идёт в реальном времени (сколько секунд клип — столько и ждёшь).
-- Длина выбирается как наибольшее чётное число циклов, влезающее в 60с
-  (`computeClipDuration` в `recorder.js`).
+Instrument groups expose two uniforms: u…Vel (velocity, smoothly decays) and
+u…Pitch (note pitch). An explicit tag always overrides auto-detection.
 
-## ⚠️ Лицензия
+## Deployment
+```
+npm run build      # Outputs to dist/ (static files)
+```
+Deploy dist/ to any static hosting: Vercel, Netlify, Cloudflare Pages, or
+GitHub Pages. No backend required.
 
-Strudel распространяется под **AGPL-3.0**. Это копилефт: публикуя сайт с интеграцией
-Strudel, ты обязан открыть исходники всего проекта под AGPL-совместимой лицензией.
-Поэтому этот проект помечен `AGPL-3.0-or-later`. Закрыть исходники или применить
-проприетарную лицензию нельзя. Подробности: https://www.gnu.org/licenses/agpl-3.0
+## ⚠️ License
+Strudel is distributed under AGPL-3.0. Accordingly, this project is
+licensed under AGPL-3.0-or-later. See: https://www.gnu.org/licenses/agpl-3.0
