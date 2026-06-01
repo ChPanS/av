@@ -18,7 +18,7 @@ import {
 import { initRenderer, loadShader, startRenderLoop, getCanvas, setClockProvider } from './renderer.js';
 import { handleHap } from './bridge.js';
 import { createHighlighter } from './highlight.js';
-import { createEditor } from './editor.js';
+import { createEditor, createViewerEditor } from './editor.js';
 import { computeClipDuration, recordClip, downloadBlob } from './recorder.js';
 import { convertWebmToMp4 } from './mp4.js';
 import { defaultScene } from './scenes/default.js';
@@ -48,15 +48,58 @@ const loaded = loadFromHash() || defaultScene;
 const runFromEditor = () => playBtn.click();
 const patternEd = createEditor(panePattern, loaded.pattern, 'js', runFromEditor);
 const shaderEd = createEditor(paneShader, loaded.shader, 'glsl', runFromEditor);
-const highlighter = createHighlighter(patternEd.view); // подсветка играющих нот
+const highlighter = createHighlighter();   // подсветка играющих нот
+highlighter.addView(patternEd.view);
 
-// Задел под будущую кнопку «совмещение»: кладёт редактор (с подсветкой) поверх
-// рендера. Сейчас не привязано к кнопке — вызывать setEditorOverlay(true/false).
-// Для полноэкранного режима кнопка дополнительно дёрнет requestFullscreen на #stage.
-function setEditorOverlay(on) {
-  document.querySelector('main')?.classList.toggle('overlay-mode', !!on);
+// canvas для .pianoroll()/.scope()/.spiral() (Strudel рисует в #test-canvas) —
+// держим размер буфера равным области редактора, иначе визуал будет 300×150
+const pianoCanvas = $('test-canvas');
+function sizePianoCanvas() {
+  if (!pianoCanvas) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(pianoCanvas.clientWidth * dpr);
+  const h = Math.round(pianoCanvas.clientHeight * dpr);
+  if (w > 0 && h > 0 && (pianoCanvas.width !== w || pianoCanvas.height !== h)) {
+    pianoCanvas.width = w;
+    pianoCanvas.height = h;
+  }
 }
-window.__setEditorOverlay = setEditorOverlay; // временный доступ для теста из консоли
+if (pianoCanvas && 'ResizeObserver' in window) {
+  new ResizeObserver(sizePianoCanvas).observe(pianoCanvas);
+}
+sizePianoCanvas();
+
+// ---------- COMBINE: read-only код поверх рендера (для шэринга / фуллскрина) ----------
+const combineBtn = $('combine');
+const codeOverlay = $('codeoverlay');
+let viewer = null;          // read-only зеркало паттерна
+let combineOn = false;
+
+function syncViewer() {
+  if (!viewer) return;
+  const code = patternEd.get();
+  if (code !== viewer.lastCode) {
+    viewer.set(code);
+    viewer.lastCode = code;
+  }
+}
+
+combineBtn.onclick = () => {
+  combineOn = !combineOn;
+  combineBtn.classList.toggle('on', combineOn);
+  if (combineOn) {
+    if (!viewer) {
+      viewer = createViewerEditor(codeOverlay, patternEd.get());
+      viewer.lastCode = patternEd.get();
+      highlighter.addView(viewer.view); // подсветка едет и в зеркало
+    } else {
+      syncViewer();
+    }
+    codeOverlay.classList.add('show');
+  } else {
+    codeOverlay.classList.remove('show');
+  }
+};
 
 // ---------- вкладки + мобильный аккордеон ----------
 const leftSection = $('left');
@@ -279,6 +322,7 @@ playBtn.onclick = async () => {
     const cps = getCps();
     setStatus('играет · обновлено · cps ' + cps.toFixed(2));
     log('pattern применён · cps ' + cps.toFixed(2), 'ok');
+    if (combineOn) syncViewer(); // обновляем код в оверлее
   } catch (e) {
     reportError('Ошибка в паттерне', e);
   } finally {

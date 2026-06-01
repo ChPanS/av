@@ -46,16 +46,6 @@
 
     main { flex: 1; display: flex; min-height: 0; position: relative; }
 
-    /* ── задел под полноэкранный «оверлей»: редактор поверх рендера ──
-       включается классом .overlay-mode на <main> (см. setEditorOverlay в main.js).
-       Подсветка нот и редактор работают те же самые — просто всплывают поверх. */
-    main.overlay-mode .left {
-      position: absolute; inset: 0; z-index: 50; width: 100%;
-      border: none; background: rgba(5, 6, 8, 0.5); backdrop-filter: blur(3px);
-    }
-    main.overlay-mode .left .editors { height: 100% !important; }
-    main.overlay-mode .logpanel { display: none; }
-
     /* левая колонка — редакторы */
     .left { width: 46%; min-width: 340px; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
     .tabs { display: flex; gap: 2px; padding: 10px 12px 0; }
@@ -66,14 +56,28 @@
       letter-spacing: 0.04em;
     }
     .tab.active { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700; }
-    .editors { flex: 1; position: relative; border-top: 1px solid var(--line); min-height: 0; }
-    .pane { position: absolute; inset: 0; }
+    .editors { flex: 1; position: relative; border-top: 1px solid var(--line); min-height: 0; background: #0a0c10; }
+    .pane { position: absolute; inset: 0; z-index: 1; }
     .pane.hidden { display: none; }
+    /* canvas для .pianoroll()/.scope()/.spiral() — Strudel рисует сюда (id test-canvas),
+       лежит ПОЗАДИ кода; фон CM делаем прозрачным, чтобы визуал просвечивал */
+    #test-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+    .editors .cm-editor, .editors .cm-gutters, .editors .cm-scroller { background: transparent !important; }
 
     /* правая колонка — рендер */
     .right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
     #stage { flex: 1; position: relative; background: #000; overflow: hidden; }
     #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    /* read-only оверлей кода поверх рендера (combine) — для красивого шэринга */
+    #codeoverlay {
+      position: absolute; top: 0; left: 0; bottom: 0; width: 42%; max-width: 560px;
+      z-index: 20; display: none; overflow: hidden;
+      background: linear-gradient(90deg, rgba(5,6,8,0.66), rgba(5,6,8,0.28));
+      border-right: 1px solid rgba(255,255,255,0.08);
+    }
+    #codeoverlay.show { display: block; }
+    #codeoverlay .cm-editor { height: 100%; }
+    #combine.on { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700; }
 
     /* панель управления */
     .controls { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--panel); }
@@ -179,6 +183,7 @@
         <button class="tab" id="tab-shader">shader.frag</button>
       </div>
       <div class="editors">
+        <canvas id="test-canvas"></canvas>
         <div class="pane" id="pane-pattern"></div>
         <div class="pane" id="pane-shader"></div>
       </div>
@@ -191,12 +196,14 @@
     <section class="right">
       <div id="stage">
         <canvas id="gl"></canvas>
+        <div id="codeoverlay"></div>
       </div>
       <div class="controls">
         <button class="ctl" id="play">▶ play / update</button>
         <button class="ctl" id="stop">■ stop</button>
         <button class="ctl" id="share">● share (video)</button>
         <button class="ctl" id="fullscreen">⤢ fullscreen</button>
+        <button class="ctl" id="combine">▦ combine</button>
         <button class="ctl" id="copylink">⎘ link</button>
         <button class="ctl" id="debug">⚙ debug</button>
         <button class="ctl" id="info">? help</button>
@@ -212,20 +219,26 @@
       <h2>⚠ Предупреждение и условия использования</h2>
 
       <h3>Фоточувствительность</h3>
-      <p>
-      Сервис может содержать анимации с мерцанием и резкими изменениями цветов, что в редких случаях может вызывать дискомфорт или реакции у людей с фоточувствительностью/эпилепсией. При наличии подобных особенностей рекомендуется соблюдать осторожность или прекратить использование.
-      </p>
+      <p>Этот сайт показывает анимацию с мерцанием, контрастными вспышками и быстро
+      меняющимися цветами, синхронизированную с музыкой. В редких случаях подобное
+      может вызвать дискомфорт или приступ у людей с фоточувствительной эпилепсией.
+      Если у тебя или у кого-то рядом бывали такие реакции — не продолжай или смотри
+      с осторожностью: на расстоянии от экрана, в хорошо освещённой комнате, с перерывами.</p>
 
-      <h3>Ответственность за исполнение кода</h3>
-      <p>
-      Сервис предоставляет среду для выполнения пользовательского кода (JavaScript/Strudel, GLSL), исполняемого локально в браузере. Пользователь самостоятельно несёт ответственность за запуск любого кода, включая сторонний.
-      </p>
-      <p>
-      Сервис предоставляется «as is» и без гарантий. Администрация не несёт ответственности за возможный ущерб, потерю данных или сбои, связанные с использованием сервиса или выполнением кода.
-      </p>
-      <p>
-      Используя сервис, пользователь подтверждает согласие с данными условиями и принимает связанные риски.
-      </p>
+      <h3>Исполнение кода и ответственность</h3>
+      <p>Сервис предоставляет среду для написания и исполнения пользовательского кода,
+      включая код на языке JavaScript (через Strudel) и шейдеры на языке GLSL. Код
+      исполняется локально в браузере пользователя. Пользователь самостоятельно и под
+      свою полную ответственность принимает решение о запуске любого кода — как
+      введённого им самостоятельно, так и полученного из внешних источников, в том
+      числе по ссылкам, которыми поделились третьи лица.</p>
+      <p>Сервис предоставляется на условиях «как есть» (as is) и «по мере доступности»
+      (as available), без каких-либо гарантий, явных или подразумеваемых. Администрация
+      сервиса не несёт ответственности за любой прямой или косвенный ущерб, утрату
+      данных, сбои в работе устройства или иные последствия, возникшие в результате
+      использования сервиса и (или) исполнения любого кода.</p>
+      <p>Продолжая использование сервиса, пользователь подтверждает, что ознакомлен с
+      настоящим уведомлением, согласен с ним и принимает указанные риски на себя.</p>
 
       <label class="ack"><input type="checkbox" id="epi-remember" checked> Больше не показывать на этом устройстве</label>
       <button class="ctl accept" id="epi-ok">Принимаю, продолжить</button>
