@@ -3,7 +3,6 @@
 //  - Shift-Tab: убрать отступ
 //  - Ctrl/Cmd-Enter: запустить (onRun), БЕЗ вставки переноса строки
 import { EditorView, basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
 import { indentUnit } from '@codemirror/language';
@@ -53,33 +52,6 @@ export function createEditor(parent, doc, kind /* 'js' | 'glsl' */, onRun) {
 
   return {
     get: () => view.state.doc.toString(),
-    set: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
-    view,
-  };
-}
-
-// read-only «зеркало» паттерна для оверлея в фуллскрине: видно код и подсветку
-// играющих нот, можно скроллить, но нельзя редактировать (не редактируемое).
-export function createViewerEditor(parent, doc) {
-  const view = new EditorView({
-    doc,
-    parent,
-    extensions: [
-      EditorView.editable.of(false),     // не редактируется
-      EditorState.readOnly.of(true),
-      javascript(),
-      oneDark,
-      highlightField,
-      highlightTheme,
-      EditorView.lineWrapping,
-      EditorView.theme({
-        '&': { height: '100%', fontSize: '13px', background: 'transparent' },
-        '.cm-scroller': { fontFamily: "'JetBrains Mono', ui-monospace, monospace" },
-        '.cm-gutters': { background: 'transparent', border: 'none' },
-      }),
-    ],
-  });
-  return {
     set: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
     view,
   };

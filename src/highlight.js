@@ -43,60 +43,46 @@ export const highlightTheme = EditorView.baseTheme({
 });
 
 // нормализуем элемент locations в {from,to} (поддержка разных форм)
-function toRange(loc) {
+function toRange(loc, docLen) {
   let from, to;
   if (Array.isArray(loc)) { from = loc[0]; to = loc[1]; }
   else if (loc && typeof loc === 'object') { from = loc.start ?? loc.from; to = loc.end ?? loc.to; }
   if (from && typeof from === 'object') from = from.offset ?? from.index;
   if (to && typeof to === 'object') to = to.offset ?? to.index;
   if (typeof from !== 'number' || typeof to !== 'number') return null;
-  if (from < 0) from = 0;
+  from = Math.max(0, Math.min(from, docLen));
+  to = Math.max(from, Math.min(to, docLen));
   if (to <= from) return null;
   return { from, to };
 }
 
-// контроллер: держит активные подсветки, гасит по времени (rAF),
-// рассылает их во ВСЕ привязанные редакторы (живой + read-only зеркало для оверлея)
-export function createHighlighter() {
-  let views = [];
-  let active = [];        // { from, to, expire } — сырые смещения
+// контроллер: держит активные подсветки и гасит их по времени (rAF)
+export function createHighlighter(view) {
+  let active = [];        // { from, to, expire }
   let raf = null;
   let lastSig = '';
 
   function loop() {
     const now = performance.now();
     active = active.filter((a) => a.expire > now);
-    const sig = active.map((a) => a.from + ':' + a.to).join('|');
-    if (sig !== lastSig) {
+    const ranges = active.map((a) => ({ from: a.from, to: a.to }));
+    const sig = ranges.map((r) => r.from + ':' + r.to).join('|');
+    if (sig !== lastSig) {             // диспатчим только при изменении набора
       lastSig = sig;
-      for (const v of views) dispatchTo(v);
+      try { view.dispatch({ effects: setHighlights.of(ranges) }); } catch (e) {}
     }
     raf = requestAnimationFrame(loop);
-  }
-  function dispatchTo(v) {
-    const docLen = v.state.doc.length;
-    const ranges = [];
-    for (const a of active) {
-      const from = Math.min(a.from, docLen);
-      const to = Math.min(a.to, docLen);
-      if (to > from) ranges.push({ from, to });
-    }
-    try { v.dispatch({ effects: setHighlights.of(ranges) }); } catch (e) {}
   }
   if (raf === null) loop();
 
   return {
-    addView(v) { if (v && !views.includes(v)) views.push(v); },
-    removeView(v) {
-      views = views.filter((x) => x !== v);
-      try { v.dispatch({ effects: setHighlights.of([]) }); } catch (e) {}
-    },
     // locations: hap.context.locations; holdMs: длительность ноты в мс
     light(locations, holdMs) {
       if (!Array.isArray(locations) || !locations.length) return;
+      const docLen = view.state.doc.length;
       const exp = performance.now() + Math.max(60, Math.min(holdMs || 140, 600));
       for (const loc of locations) {
-        const r = toRange(loc);
+        const r = toRange(loc, docLen);
         if (r) active.push({ from: r.from, to: r.to, expire: exp });
       }
     },
