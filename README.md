@@ -32,21 +32,30 @@ modification. Creative work happens in scenes/ and bridge.js.
 ## Tagging Sounds for Visuals — .vis()
 
 No name-guessing. Every channel is an explicit tag on a track:
-`.vis("<prefix><Name>")` — prefix (lowercase) picks the channel *type*, Name
-(capitalized, your choice) becomes part of the uniform name. Nothing to
-register anywhere: `.vis("dKick")` just gives you `uDKick` in the shader.
+`.vis("<prefix><Name>")` — prefix (lowercase) picks the channel *type* only,
+it does NOT appear in the uniform name. Name (capitalized, your choice) is
+what shows up after `u`: `.vis("dKick")` just gives you `uKick` in the shader.
 
-| Prefix | Tracks | Uniform(s) for `.vis("xName")` |
+| Prefix | Tracks | Uniform for `.vis("xName")` |
 |---|---|---|
-| `d` | level only (drums/hits), fast impulse decay | one: `uxName` |
-| `i` | velocity (decays) + pitch (holds) | two: `uxNameVel`, `uxNamePitch` |
-| `p` | pitch only, holds last note | one: `uxName` |
+| `d` | level only (drums/hits), fast impulse decay | `uniform float uName;` |
+| `i` | velocity (decays) + pitch (holds) | `uniform AVInstrument uName;` → `.vel` / `.pitch` |
+| `p` | pitch only, holds last note | `uniform float uName;` |
 
 ```js
-s("bd*4").vis("dKick")                       // → uDKick
-note("<c2 g1>").s("sawtooth").vis("iBass")    // → uIBassVel, uIBassPitch
-note("c5 e5").s("triangle").vis("pArp")       // → uPArp
+s("bd*4").vis("dKick")                       // → uKick
+note("<c2 g1>").s("sawtooth").vis("iBass")    // → uBass.vel, uBass.pitch (struct)
+note("c5 e5").s("triangle").vis("pArp")       // → uArp
 ```
+
+`i`-tagged channels are ONE struct uniform (WebGL2 struct uniforms, native
+support) with `.vel`/`.pitch` fields — not two separate names. Two different
+tags resolving to the same Name (e.g. `dPad` and `iPad`, both → `uPad`)
+collide; the second one is skipped with a warning.
+
+The shader editor autocompletes: type `uLe` to see `uLead` from the tags
+currently in the pattern editor, type `uLead.` to see `.vel`/`.pitch` — live,
+scanned from the pattern text as you type, no need to press Play first.
 
 Decay speed is NOT a per-instrument-name lookup table — if the event has a
 Strudel ADSR control (`.release(sec)` / `.decay(sec)`), that real envelope
@@ -57,9 +66,9 @@ Tags must appear as literal strings in the pattern source — uniforms are
 collected via a scan of the pattern text *before* the shader compiles, so a
 shader referencing a uniform with no matching `.vis("...")` tag in the
 pattern will fail to compile (undeclared identifier) — this is intentional:
-pattern and shader must literally agree on tags. Unrecognized prefixes or
-malformed tags don't crash the pattern; they log a warning (debug panel) and
-produce no uniform.
+pattern and shader must literally agree on tags. Unrecognized prefixes,
+malformed tags, or name collisions don't crash the pattern; they log a
+warning (debug panel) and produce no uniform.
 
 Full details, defaults and how to add a new prefix type: see `GUIDE.md`.
 

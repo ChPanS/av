@@ -16,7 +16,7 @@ import {
   getClock, setLoopCycles, setMasterVolume,
 } from './audio.js';
 import { initRenderer, loadShader, startRenderLoop, getCanvas, setClockProvider } from './renderer.js';
-import { handleHap, syncTags } from './bridge.js';
+import { handleHap, syncTags, scanUniformCatalog } from './bridge.js';
 import { createHighlighter } from './highlight.js';
 import { createEditor } from './editor.js';
 import { computeClipDuration, recordClip, downloadBlob } from './recorder.js';
@@ -47,7 +47,7 @@ const paneShader = $('pane-shader');
 const loaded = loadFromHash() || defaultScene;
 const runFromEditor = () => playBtn.click();
 const patternEd = createEditor(panePattern, loaded.pattern, 'js', runFromEditor);
-const shaderEd = createEditor(paneShader, loaded.shader, 'glsl', runFromEditor);
+const shaderEd = createEditor(paneShader, loaded.shader, 'glsl', runFromEditor, () => scanUniformCatalog(patternEd.get()));
 const highlighter = createHighlighter(patternEd.view); // подсветка играющих нот
 
 // Задел под будущую кнопку «совмещение»: кладёт редактор (с подсветкой) поверх

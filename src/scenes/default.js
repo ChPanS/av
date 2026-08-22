@@ -1,10 +1,10 @@
 // Визитка: лоу-фай хаус с DnB-брейком + развёрнутый domain-warp шейдер.
-// Демонстрирует все три типа тегов .vis(): dKick/dClap (удары, только громкость),
-// iPad (инструмент: велосити + питч), pLead (только питч, держит ноту).
-// Шейдер использует uDKick (пульс), uEnergy (секция интро<->дроп: наезд+фишай+
-// сбор облаков к центру), uIPadVel (гармоническое дыхание/яркость), uHue (палитра),
-// uDClap (акценты), uPLead (лёгкий сдвиг оттенка по ноте лида). Фоновые облака
-// другого цвета летают в обратную сторону.
+// Демонстрирует все три типа тегов .vis(): dKick/dClap (удары -> uKick/uClap,
+// только громкость), iPad (инструмент -> uPad.vel/uPad.pitch), pLead (только
+// питч, держит ноту -> uLead). Шейдер использует uKick (пульс), uEnergy (секция
+// интро<->дроп: наезд+фишай+сбор облаков к центру), uPad.vel (гармоническое
+// дыхание/яркость), uHue (палитра), uClap (акценты), uLead (лёгкий сдвиг
+// оттенка по ноте лида). Фоновые облака другого цвета летают в обратную сторону.
 
 export const defaultScene = {
   pattern: `// loop: 24
@@ -136,7 +136,7 @@ vec4 create_bg(vec2 fragCoord) {
         float dist = map(pos, cPos);
         dist = max(abs(dist), 0.02);
         float a = exp(-dist*3.0);
-        if (mod(length(pos)+24.0*uTime, 30.0) < 3.0 + uDKick * 10.0) {
+        if (mod(length(pos)+24.0*uTime, 30.0) < 3.0 + uKick * 10.0) {
             a *= 2.0;
             acc2 += a;
         }
@@ -144,7 +144,7 @@ vec4 create_bg(vec2 fragCoord) {
         t += dist * 0.5;
     }
 
-    vec3 col = vec3(acc * 0.01 + uIPadVel * 0.3, acc * 0.011 + acc2*0.002 + uIPadVel * 0.1, acc * 0.012+ acc2*0.005 + uIPadVel * 0.6);
+    vec3 col = vec3(acc * 0.01 + uPad.vel * 0.3, acc * 0.011 + acc2*0.002 + uPad.vel * 0.1, acc * 0.012+ acc2*0.005 + uPad.vel * 0.6);
     vec4 fragColor = vec4(col, 1.0 - t * 0.03);
   return fragColor;
 }
@@ -154,7 +154,7 @@ vec4 create_fg(vec2 fragCoord) {
   vec2 uv0 = uv;
   vec3 col = vec3(0.0);
 
-  uv *= 1.0 - uDKick * 0.15;
+  uv *= 1.0 - uKick * 0.15;
   float angle = uTime / 2.0;
   float sign = 0.0;
   if(int(uBeat) % 4 == 0)
@@ -170,7 +170,7 @@ vec4 create_fg(vec2 fragCoord) {
     uv = fract(uv * 1.5) - 0.5;
     float d = length(uv) * exp(-length(uv0));
 
-    vec3 c = hsv2rgb(vec3(uHue + i * 0.05 + uTime * 0.02 + uPLead * 0.06, 0.7 * tan(uIPadVel), 1.0));
+    vec3 c = hsv2rgb(vec3(uHue + i * 0.05 + uTime * 0.02 + uLead * 0.06, 0.7 * tan(uPad.vel), 1.0));
 
     d = sin(d * 8.0 + uTime * 6.28) / 8.0;
     d = abs(d);
@@ -179,7 +179,7 @@ vec4 create_fg(vec2 fragCoord) {
     col += c * d;
   }
 
-  col += vec3(uDClap) * 0.25;
+  col += vec3(uClap) * 0.25;
 
   col += vec3(0.1, 0.2, 0.3) * length(uv0);
 

@@ -2,22 +2,28 @@
 //
 // Никакого угадывания по имени сэмпла. Всё явно тегами: .vis("<префикс><Имя>").
 // Префикс определяет ТИП канала (что именно трекать и как это гаснет),
-// Имя — придумывает пользователь, оно же идёт в имя юниформа.
+// Имя — придумывает пользователь. Префикс в имя юниформа НЕ попадает —
+// в шейдере всегда просто "u" + Имя, чтобы было чисто (uKick, не uDKick):
 //
 //   d<Имя>  — удар: только громкость, импульс + быстрое затухание.
-//             .vis("dKick") -> один юниформ  uDKick
-//   i<Имя>  — инструмент: велосити (гаснет) + питч (держится).
-//             .vis("iLead") -> два юниформа  uILeadVel  uILeadPitch
+//             .vis("dKick") -> uniform float uKick
+//   i<Имя>  — инструмент: велосити (гаснет) + питч (держится), ДВА поля ОДНОГО
+//             uniform-а через точку (структура в GLSL, WebGL2 умеет так нативно):
+//             .vis("iLead") -> uniform AVInstrument uLead;  =>  uLead.vel, uLead.pitch
 //   p<Имя>  — только питч: держит последнюю ноту, без огибающей громкости.
-//             .vis("pLead") -> один юниформ  uPLead
+//             .vis("pLead") -> uniform float uLead
 //
-// Имя юниформа — это "u" + тег как есть (+Vel/+Pitch для инструментов), поэтому
-// оно детерминировано по тексту тега и не требует регистрации где-либо ещё.
+// Если два разных тега (например dPad и iPad) метят в одно и то же Имя — второй
+// пропускается с предупреждением (см. warnings из syncTags), юниформ не дублируется.
 //
 // Набор активных каналов ПОЛНОСТЬЮ определяется тегами, которые встречаются
 // в коде паттерна (см. syncTags ниже) — если тега нет, юниформа не будет и
 // в шейдере, попытка сослаться на него — ошибка компиляции (это осознанно:
 // шейдер и паттерн должны буквально совпадать по тегам, никакой магии).
+// scanUniformCatalog(code) — то же самое сканирование, но БЕЗ побочных эффектов
+// (не трогает uniforms/decay) — им кормится автокомплит в редакторе шейдера
+// (main.js передаёт live-текст паттерна), поэтому uPad. подсказывает .vel/.pitch
+// сразу по мере набора тега в паттерне, без нажатия Play.
 //
 // Скорость затухания (tau, в секундах) НЕ гадается по названию инструмента —
 // если у события паттерна задан .release()/.decay() (Strudel ADSR), берём его
@@ -34,24 +40,27 @@ export const uniforms = {
 };
 const GLOBAL_KEYS = new Set(Object.keys(uniforms));
 
-// --- типы каналов -----------------------------------------------------
+// --- типы каналов -------------------------------------------------------
+// channels(base) получает уже готовое имя юниформа ("u" + Имя тега) и
+// возвращает { ключ: 'level'|'pitch' }. 'level' гаснет по tau, 'pitch' держится.
 const KIND_SPECS = {
   d: { // удар: только громкость
     defaultTau: 0.12,
     cap: 1.5,
-    channels: (tag) => ({ ['u' + tag]: 'level' }),
+    channels: (base) => ({ [base]: 'level' }),
   },
-  i: { // инструмент: велосити + питч
+  i: { // инструмент: велосити + питч, поля одной структуры
     defaultTau: 0.35,
     cap: 1.0,
-    channels: (tag) => ({ ['u' + tag + 'Vel']: 'level', ['u' + tag + 'Pitch']: 'pitch' }),
+    channels: (base) => ({ [base + '.vel']: 'level', [base + '.pitch']: 'pitch' }),
   },
   p: { // только питч, держит значение
     defaultTau: null,
     cap: 1.0,
-    channels: (tag) => ({ ['u' + tag]: 'pitch' }),
+    channels: (base) => ({ [base]: 'pitch' }),
   },
 };
+const STRUCT_NAME = 'AVInstrument'; // имя GLSL-структуры для i-каналов (.vel/.pitch)
 
 const TAG_SHAPE = /^([a-z]+)([A-Z][A-Za-z0-9]*)$/;
 function parseTag(tag) {
@@ -59,22 +68,62 @@ function parseTag(tag) {
   return m ? { prefix: m[1], name: m[2] } : null;
 }
 
+const TAG_IN_CODE_RE = /\.vis\(\s*(['"])([^'"]+)\1\s*\)/g;
+
+// достаёт все .vis("...") из текста паттерна и разбирает каждый тег.
+// Чистая функция — без побочных эффектов, можно дёргать на каждый кейстрок.
+function scan(code) {
+  const found = new Set();
+  TAG_IN_CODE_RE.lastIndex = 0;
+  let m;
+  while ((m = TAG_IN_CODE_RE.exec(code || ''))) found.add(m[2]);
+
+  const parsed = [];
+  for (const tag of found) {
+    const p = parseTag(tag);
+    if (!p) {
+      parsed.push({ tag, error: `тег .vis("${tag}") не распознан — нужен формат префикс+Имя, например dKick` });
+      continue;
+    }
+    const spec = KIND_SPECS[p.prefix];
+    if (!spec) {
+      parsed.push({ tag, error: `тег .vis("${tag}"): неизвестный префикс "${p.prefix}" (доступны: ${Object.keys(KIND_SPECS).join(', ')})` });
+      continue;
+    }
+    parsed.push({ tag, prefix: p.prefix, name: p.name, spec });
+  }
+  return parsed;
+}
+
+// раздаёт готовые имена юниформов ("u"+Имя), отсекая коллизии (два тега -> одно Имя)
+function resolveBases(parsedTags) {
+  const usedBase = new Map(); // base -> tag, который его занял
+  const resolved = [];
+  const warnings = [];
+  for (const item of parsedTags) {
+    if (item.error) { warnings.push(item.error); continue; }
+    const base = 'u' + item.name;
+    if (usedBase.has(base)) {
+      warnings.push(`тег .vis("${item.tag}"): юниформ ${base} уже занят тегом "${usedBase.get(base)}" — пропущен`);
+      continue;
+    }
+    usedBase.set(base, item.tag);
+    resolved.push({ ...item, base });
+  }
+  return { resolved, warnings };
+}
+
 // tag -> { spec, chans: {ключ: 'level'|'pitch'} }
 const channelIndex = new Map();
 // ключ уровня -> текущий tau в секундах (обновляется на каждый хит по ADSR события)
 const tauByKey = {};
 
-const TAG_IN_CODE_RE = /\.vis\(\s*(['"])([^'"]+)\1\s*\)/g;
-
-// Пересобрать набор каналов из ИСХОДНОГО текста паттерна (regex по .vis("...")).
+// Пересобрать набор каналов из ИСХОДНОГО текста паттерна.
 // Вызывается перед каждой компиляцией шейдера (main.js), чтобы юниформы,
 // которых требует текущий текст паттерна, существовали к моменту сборки шейдера.
 // Возвращает { tags, warnings } — warnings стоит показать пользователю в лог.
 export function syncTags(code) {
-  const found = new Set();
-  TAG_IN_CODE_RE.lastIndex = 0;
-  let m;
-  while ((m = TAG_IN_CODE_RE.exec(code || ''))) found.add(m[2]);
+  const { resolved, warnings } = resolveBases(scan(code));
 
   // сбрасываем всё динамическое (глобальные каналы не трогаем)
   for (const k of Object.keys(uniforms)) {
@@ -83,26 +132,50 @@ export function syncTags(code) {
   channelIndex.clear();
   for (const k of Object.keys(tauByKey)) delete tauByKey[k];
 
-  const warnings = [];
-  for (const tag of found) {
-    const parsed = parseTag(tag);
-    if (!parsed) {
-      warnings.push(`тег .vis("${tag}") не распознан — нужен формат префикс+Имя, например dKick`);
-      continue;
-    }
-    const spec = KIND_SPECS[parsed.prefix];
-    if (!spec) {
-      warnings.push(`тег .vis("${tag}"): неизвестный префикс "${parsed.prefix}" (доступны: ${Object.keys(KIND_SPECS).join(', ')})`);
-      continue;
-    }
-    const chans = spec.channels(tag);
+  for (const item of resolved) {
+    const chans = item.spec.channels(item.base);
     for (const [key, kind] of Object.entries(chans)) {
       uniforms[key] = 0;
-      if (kind === 'level') tauByKey[key] = spec.defaultTau;
+      if (kind === 'level') tauByKey[key] = item.spec.defaultTau;
     }
-    channelIndex.set(tag, { spec, chans });
+    channelIndex.set(item.tag, { spec: item.spec, chans });
   }
-  return { tags: [...found], warnings };
+  return { tags: resolved.map((r) => r.tag), warnings };
+}
+
+// Каталог для автокомплита в редакторе шейдера:
+// [{ name: 'uPad', type: 'AVInstrument', fields: ['vel','pitch'] }, { name: 'uKick', type: 'float', fields: null }, ...].
+// Чистая функция (не мутирует состояние) — можно звать на живой текст паттерна на каждый кейстрок.
+export function scanUniformCatalog(code) {
+  const { resolved } = resolveBases(scan(code));
+  const catalog = resolved.map((r) => (
+    r.prefix === 'i'
+      ? { name: r.base, type: STRUCT_NAME, fields: ['vel', 'pitch'] }
+      : { name: r.base, type: 'float', fields: null }
+  ));
+  for (const g of GLOBAL_KEYS) catalog.push({ name: g, type: 'float', fields: null });
+  catalog.push({ name: 'uResolution', type: 'vec2', fields: null });
+  return catalog;
+}
+
+// GLSL-объявления для текущего набора юниформов (глобальные float + один общий
+// struct-тип для всех i-каналов + per-тег uniform-ы). Дергается renderer.js
+// при каждой компиляции шейдера — ключи с точкой ("uPad.vel") группируются
+// в структуру, обычные ключи объявляются как float.
+export function shaderUniformDecls() {
+  const structBases = [];
+  const flats = [];
+  for (const key of Object.keys(uniforms)) {
+    const dot = key.indexOf('.');
+    if (dot === -1) { flats.push(key); continue; }
+    const base = key.slice(0, dot);
+    if (!structBases.includes(base)) structBases.push(base);
+  }
+  let s = '';
+  if (structBases.length) s += `struct ${STRUCT_NAME} { float vel; float pitch; };\n`;
+  for (const k of flats) s += `uniform float ${k};\n`;
+  for (const base of structBases) s += `uniform ${STRUCT_NAME} ${base};\n`;
+  return s;
 }
 
 let hueTarget = 0;

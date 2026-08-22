@@ -2,7 +2,7 @@
 // Пользователь пишет только тело mainImage(); мы оборачиваем его в полный
 // шейдер с объявленными юниформами.
 
-import { uniforms, decayUniforms } from './bridge.js';
+import { uniforms, decayUniforms, shaderUniformDecls } from './bridge.js';
 
 let gl, canvas, program, vao;
 let startTime = performance.now();
@@ -22,11 +22,10 @@ void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 `;
 
 function uniformDecls() {
-  // объявления генерируются из объекта uniforms — добавил канал в bridge.js,
-  // он автоматически объявлен здесь. Все скалярные каналы — float, uResolution — vec2.
-  let s = 'uniform vec2  uResolution;\n';
-  for (const k of Object.keys(uniforms)) s += `uniform float ${k};\n`;
-  return s;
+  // объявления берём у bridge.js (он знает, какие ключи — скаляры, а какие —
+  // поля struct-а вида "uPad.vel"/"uPad.pitch" и генерирует валидный GLSL).
+  // uResolution — единственный юниформ, не завязанный на теги, объявляем тут.
+  return 'uniform vec2  uResolution;\n' + shaderUniformDecls();
 }
 
 function fragWrapper(userBody) {
