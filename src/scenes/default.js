@@ -1,7 +1,10 @@
 // Визитка: лоу-фай хаус с DnB-брейком + развёрнутый domain-warp шейдер.
-// Шейдер использует uKick (пульс), uEnergy (секция интро<->дроп: наезд+фишай+
-// сбор облаков к центру), uPad (гармоническое дыхание/яркость), uHue (палитра),
-// uSnare/uHat (акценты). Фоновые облака другого цвета летают в обратную сторону.
+// Демонстрирует все три типа тегов .vis(): dKick/dClap (удары, только громкость),
+// iPad (инструмент: велосити + питч), pLead (только питч, держит ноту).
+// Шейдер использует uDKick (пульс), uEnergy (секция интро<->дроп: наезд+фишай+
+// сбор облаков к центру), uIPadVel (гармоническое дыхание/яркость), uHue (палитра),
+// uDClap (акценты), uPLead (лёгкий сдвиг оттенка по ноте лида). Фоновые облака
+// другого цвета летают в обратную сторону.
 
 export const defaultScene = {
   pattern: `// loop: 24
@@ -14,7 +17,7 @@ const roots   = "<c2 ab1 eb2 f2>"
 
 const pad = note(harmony)
   .s("gm_fx_atmosphere:1").lpf(sine.range(650,1500).slow(8)).lpq(6)
-  .attack(0.04).release(0.6).room(0.6).coarse(2).gain(0.5).vis("pad")
+  .attack(0.04).release(0.6).room(0.6).coarse(2).gain(0.5).vis("iPad")
 
 const sax_1 = note(harmony_2)
   .s("gm_baritone_sax").lpf(sine.range(650,1500).slow(8)).lpq(6)
@@ -29,18 +32,18 @@ const bass = note(roots)
 
 const crackle = s("hh*16").gain(rand.range(0.3,0.5)).hpf(6500).pan(rand)
 
-const kick  = s("bd*4").gain(0.9)
-const clap  = s("~ cp ~ cp").gain(0.55).room(0.3)
+const kick  = s("bd*4").gain(0.9).vis("dKick")
+const clap  = s("~ cp ~ cp").gain(0.55).room(0.3).vis("dClap")
 const hats  = s("[~ hh]*4").gain(0.85).pan(sine.range(0.35,0.65).fast(2))
 const ohat  = s("~ ~ ~ oh").gain(0.28)
 
 const lead = note("<g4 bb4 c5 bb4 g4 f4 eb4 f4>")
   .s("triangle").lpf(2600).gain(0.4)
-  .delay(0.4).delaytime(0.1875).delayfeedback(0.3).room(0.4)
+  .delay(0.4).delaytime(0.1875).delayfeedback(0.3).room(0.4).vis("pLead")
 
 const dnbDrums = stack(
-  s("bd ~ ~ ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ ~ ~").gain(0.9),
-  s("~ ~ ~ ~ cp ~ ~ ~ ~ ~ ~ ~ cp ~ ~ ~").gain(0.7).room(0.2),
+  s("bd ~ ~ ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ ~ ~").gain(0.9).vis("dKick"),
+  s("~ ~ ~ ~ cp ~ ~ ~ ~ ~ ~ ~ cp ~ ~ ~").gain(0.7).room(0.2).vis("dClap"),
   s("hh*16").gain(saw.range(0.15,0.4)).pan(rand)
 )
 const dnbBass = note(roots).s("sawtooth").lpf(500).lpq(5)
@@ -133,7 +136,7 @@ vec4 create_bg(vec2 fragCoord) {
         float dist = map(pos, cPos);
         dist = max(abs(dist), 0.02);
         float a = exp(-dist*3.0);
-        if (mod(length(pos)+24.0*uTime, 30.0) < 3.0 + uKick * 10.0) {
+        if (mod(length(pos)+24.0*uTime, 30.0) < 3.0 + uDKick * 10.0) {
             a *= 2.0;
             acc2 += a;
         }
@@ -141,7 +144,7 @@ vec4 create_bg(vec2 fragCoord) {
         t += dist * 0.5;
     }
 
-    vec3 col = vec3(acc * 0.01 + uPadVel * 0.3, acc * 0.011 + acc2*0.002 + uPadVel * 0.1, acc * 0.012+ acc2*0.005 + uPadVel * 0.6);
+    vec3 col = vec3(acc * 0.01 + uIPadVel * 0.3, acc * 0.011 + acc2*0.002 + uIPadVel * 0.1, acc * 0.012+ acc2*0.005 + uIPadVel * 0.6);
     vec4 fragColor = vec4(col, 1.0 - t * 0.03);
   return fragColor;
 }
@@ -150,9 +153,8 @@ vec4 create_fg(vec2 fragCoord) {
   vec2 uv = (fragCoord - 0.5 * uResolution) / uResolution.y;
   vec2 uv0 = uv;
   vec3 col = vec3(0.0);
-  float pad  = clamp(uPad, 0.0, 1.0);
-  
-  uv *= 1.0 - uKick * 0.15;
+
+  uv *= 1.0 - uDKick * 0.15;
   float angle = uTime / 2.0;
   float sign = 0.0;
   if(int(uBeat) % 4 == 0)
@@ -168,7 +170,7 @@ vec4 create_fg(vec2 fragCoord) {
     uv = fract(uv * 1.5) - 0.5;
     float d = length(uv) * exp(-length(uv0));
 
-    vec3 c = hsv2rgb(vec3(uHue + i * 0.05 + uTime * 0.02, 0.7 * tan(uPadVel), 1.0));
+    vec3 c = hsv2rgb(vec3(uHue + i * 0.05 + uTime * 0.02 + uPLead * 0.06, 0.7 * tan(uIPadVel), 1.0));
 
     d = sin(d * 8.0 + uTime * 6.28) / 8.0;
     d = abs(d);
@@ -177,7 +179,7 @@ vec4 create_fg(vec2 fragCoord) {
     col += c * d;
   }
 
-  col += vec3(uSnare) * 0.25;
+  col += vec3(uDClap) * 0.25;
 
   col += vec3(0.1, 0.2, 0.3) * length(uv0);
 

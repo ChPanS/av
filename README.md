@@ -29,25 +29,39 @@ src/
 The engine modules (audio, renderer, recorder, editor) rarely need
 modification. Creative work happens in scenes/ and bridge.js.
 
-## Adding Custom Uniforms
+## Tagging Sounds for Visuals — .vis()
+
+No name-guessing. Every channel is an explicit tag on a track:
+`.vis("<prefix><Name>")` — prefix (lowercase) picks the channel *type*, Name
+(capitalized, your choice) becomes part of the uniform name. Nothing to
+register anywhere: `.vis("dKick")` just gives you `uDKick` in the shader.
+
+| Prefix | Tracks | Uniform(s) for `.vis("xName")` |
+|---|---|---|
+| `d` | level only (drums/hits), fast impulse decay | one: `uxName` |
+| `i` | velocity (decays) + pitch (holds) | two: `uxNameVel`, `uxNamePitch` |
+| `p` | pitch only, holds last note | one: `uxName` |
+
+```js
+s("bd*4").vis("dKick")                       // → uDKick
+note("<c2 g1>").s("sawtooth").vis("iBass")    // → uIBassVel, uIBassPitch
+note("c5 e5").s("triangle").vis("pArp")       // → uPArp
 ```
-To add more channels (e.g., a dedicated uniform for melody):
-Add the field to the uniforms object in bridge.js
-Define its decay behavior
-Route it in handleHap
-Declare the uniform in the shader wrapper in renderer.js
-```
-## Sound Grouping for Visuals — .vis()
 
-The engine auto-detects sound types by name (bd → kick, hh → hat,
-synths → pad). For precise control (especially with custom samples), tag
-tracks explicitly: s("mysample").vis("kick")
+Decay speed is NOT a per-instrument-name lookup table — if the event has a
+Strudel ADSR control (`.release(sec)` / `.decay(sec)`), that real envelope
+time is used for the visual decay too. Otherwise a per-type default applies
+(`d` fast, `i` smooth). Pitch channels never decay.
 
-Drum groups: kick, snare, clap, hat, oh
-Instrument groups: pad, atmosphere, key, lead, bass, arp, fx, vox
+Tags must appear as literal strings in the pattern source — uniforms are
+collected via a scan of the pattern text *before* the shader compiles, so a
+shader referencing a uniform with no matching `.vis("...")` tag in the
+pattern will fail to compile (undeclared identifier) — this is intentional:
+pattern and shader must literally agree on tags. Unrecognized prefixes or
+malformed tags don't crash the pattern; they log a warning (debug panel) and
+produce no uniform.
 
-Instrument groups expose two uniforms: u…Vel (velocity, smoothly decays) and
-u…Pitch (note pitch). An explicit tag always overrides auto-detection.
+Full details, defaults and how to add a new prefix type: see `GUIDE.md`.
 
 ## Deployment
 ```

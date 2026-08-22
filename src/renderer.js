@@ -6,6 +6,7 @@ import { uniforms, decayUniforms } from './bridge.js';
 
 let gl, canvas, program, vao;
 let startTime = performance.now();
+let lastFrameTime = performance.now();
 let rafId = null;
 let clockProvider = null; // () => { beat, loop, frac } | null
 const uLoc = {}; // кэш локаций юниформов
@@ -122,7 +123,10 @@ export function loadShader(userBody) {
 }
 
 function frame() {
-  uniforms.uTime = (performance.now() - startTime) / 1000;
+  const now = performance.now();
+  const dt = (now - lastFrameTime) / 1000; // реальное время кадра (не 1/60 всегда)
+  lastFrameTime = now;
+  uniforms.uTime = (now - startTime) / 1000;
   // часы лупа
   if (clockProvider) {
     const c = clockProvider();
@@ -152,13 +156,14 @@ function frame() {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  decayUniforms();
+  decayUniforms(dt);
   rafId = requestAnimationFrame(frame);
 }
 
 export function startRenderLoop() {
   if (rafId === null) {
     startTime = performance.now();
+    lastFrameTime = startTime;
     frame();
   }
 }

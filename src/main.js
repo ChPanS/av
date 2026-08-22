@@ -16,7 +16,7 @@ import {
   getClock, setLoopCycles, setMasterVolume,
 } from './audio.js';
 import { initRenderer, loadShader, startRenderLoop, getCanvas, setClockProvider } from './renderer.js';
-import { handleHap } from './bridge.js';
+import { handleHap, syncTags } from './bridge.js';
 import { createHighlighter } from './highlight.js';
 import { createEditor } from './editor.js';
 import { computeClipDuration, recordClip, downloadBlob } from './recorder.js';
@@ -159,6 +159,7 @@ function reportError(prefix, e) {
 // ---------- рендер: за предупреждением об эпилепсии ----------
 initRenderer(canvas);
 setClockProvider(getClock);   // uBeat/uLoop/uBeatFrac берутся из часов лупа
+syncTags(patternEd.get());    // юниформы под теги .vis() из паттерна — ДО первой компиляции шейдера
 applyShader(true);
 // startRenderLoop() вызывается только после согласия (см. ниже)
 
@@ -248,12 +249,14 @@ playBtn.onclick = async () => {
       log('audio ready', 'ok');
     }
 
-    // 1) шейдер
+    // 1) теги .vis() из паттерна -> набор юниформов, ЗАТЕМ шейдер (он на них ссылается)
+    const code = patternEd.get();
+    const { warnings } = syncTags(code);
+    warnings.forEach((w) => log(w, 'err'));
     if (!applyShader()) { playBtn.disabled = false; return; }
 
     // 2) паттерн (live). ВАЖНО: evaluate НЕ бросает исключение при ошибке кода —
     //    он пишет её в state.evalError. Поэтому проверяем состояние вручную.
-    const code = patternEd.get();
     // длина лупа для uBeat: из комментария "// loop: N" в паттерне (иначе 24)
     const loopMatch = code.match(/loop:\s*(\d+)/i);
     setLoopCycles(loopMatch ? parseInt(loopMatch[1], 10) : 24);
