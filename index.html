@@ -221,7 +221,7 @@
       The service provides an environment for executing user code (JavaScript/Strudel, GLSL), which runs locally in the browser. The user bears sole responsibility for running any code, including third-party code.
       </p>
       <p>
-      Сhe service is provided "as is" without warranties. The administration takes no responsibility for any damage, data loss, or failures related to the use of the service or code execution.
+      The service is provided "as is" without warranties. The administration takes no responsibility for any damage, data loss, or failures related to the use of the service or code execution.
       </p>
       <p>
       By using the service, you confirm agreement with these terms and accept the associated risks.
@@ -252,17 +252,13 @@
       uniforms that change based on information from Strudel. Inspired by:
       <a href="https://www.shadertoy.com/" target="_blank" rel="noopener">shadertoy.com</a>.</p>
 
-      <h3>Available uniforms</h3>
+      <h3>Built-in uniforms</h3>
       <ul class="uni">
         <li><code>vec2 uResolution</code> — frame size in pixels</li>
         <li><code>float uTime</code> — seconds since launch (continuously increases)</li>
-        <li><code>float uKick</code> — kick drum impulse (spikes to 1, decays)</li>
-        <li><code>float uSnare</code> — snare/clap impulse</li>
-        <li><code>float uHat</code> — hat impulse</li>
-        <li><code>float uPitch</code> — pitch of the last note in octave, 0..1</li>
-        <li><code>float uHue</code> — hue, smoothly follows the harmony, 0..1</li>
+        <li><code>float uPitch</code> — pitch of the last note in octave, 0..1 (any event)</li>
+        <li><code>float uHue</code> — hue, smoothly follows <code>uPitch</code>, 0..1</li>
         <li><code>float uEnergy</code> — density/loudness of the stream, 0..1 (proxy for "intro↔drop")</li>
-        <li><code>float uPad</code> — sustain of harmonic synths (pad), soft envelope</li>
         <li><code>float uBeat</code> — position in the loop in cycles: 0..N; <code>floor(uBeat)</code> = bar number</li>
         <li><code>float uLoop</code> — position in the loop normalized 0..1 (resets to 0 at the end)</li>
         <li><code>float uBeatFrac</code> — phase within the current cycle, 0..1</li>
@@ -270,14 +266,21 @@
       <p class="dim">Example: <code>floor(uBeat)</code> gives the bar number — you can change
       the scene by bars; <code>uLoop</code> is good for smooth transitions across the entire loop.</p>
 
-      <h3>Grouping sounds for visuals — <code>.vis()</code></h3>
-      <p>The engine guesses the sound type by name (bd→kick, hh→hat, synths→pad). For precise
-      control (especially with your own samples), tag the track: <code>s("mysample").vis("kick")</code>.
-      Groups: drums — <code>kick</code>, <code>snare</code>, <code>clap</code>,
-      <code>hat</code>, <code>oh</code>; instruments — <code>pad</code>, <code>atmosphere</code>,
-      <code>key</code>, <code>lead</code>, <code>bass</code>, <code>arp</code>, <code>fx</code>,
-      <code>vox</code>. Instruments have two uniforms: <code>u…Vel</code> (velocity, smoothly
-      decays) and <code>u…Pitch</code> (note pitch). An explicit tag overrides auto-detection.</p>
+      <h3>Tagging sounds for visuals — <code>.vis()</code></h3>
+      <p>There is no guessing by sample name: every per-sound uniform comes from an explicit tag
+      on a track, <code>.vis("&lt;prefix&gt;&lt;Name&gt;")</code>. The lowercase prefix picks the
+      channel type, the capitalized Name becomes the uniform <code>u&lt;Name&gt;</code>:</p>
+      <ul class="uni">
+        <li><code>d</code> — hit, level only, fast decay: <code>s("bd*4").vis("dKick")</code> → <code>float uKick</code> (up to ~1.5)</li>
+        <li><code>i</code> — instrument: <code>.vis("iPad")</code> → <code>uPad.vel</code> (velocity, decays) and <code>uPad.pitch</code> (note, holds)</li>
+        <li><code>p</code> — pitch only, holds the last note: <code>.vis("pLead")</code> → <code>float uLead</code>, 0..1</li>
+      </ul>
+      <p>Tag individual tracks, not the whole <code>stack</code>, and write the tag as a string
+      literal — the pattern text is scanned for tags before the shader compiles, so a shader using
+      an untagged uniform will not compile. Decay follows the event's <code>.release()</code> /
+      <code>.decay()</code> when set. Names of built-in uniforms (<code>uTime</code>,
+      <code>uPitch</code>, <code>uResolution</code>…) cannot be used as tags. The shader editor
+      autocompletes tagged uniforms as you type (<code>uPa</code> → <code>uPad</code>, <code>uPad.</code> → <code>vel</code>/<code>pitch</code>).</p>
 
       <h3>Editor shortcuts</h3>
       <ul class="uni">

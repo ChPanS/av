@@ -139,7 +139,7 @@ document.addEventListener('strudel.log', (e) => {
 // которые происходят уже после нажатия play.
 setStateCallback((state) => {
   if (state.schedulerError) {
-    reportError('An error occured while playing', state.schedulerError);
+    reportError('An error occurred while playing', state.schedulerError);
   }
 });
 
@@ -258,7 +258,7 @@ playBtn.onclick = async () => {
     // 2) паттерн (live). ВАЖНО: evaluate НЕ бросает исключение при ошибке кода —
     //    он пишет её в state.evalError. Поэтому проверяем состояние вручную.
     // длина лупа для uBeat: из комментария "// loop: N" в паттерне (иначе 24)
-    const loopMatch = code.match(/loop:\s*(\d+)/i);
+    const loopMatch = code.match(/\/\/\s*loop:\s*(\d+)/i);
     setLoopCycles(loopMatch ? parseInt(loopMatch[1], 10) : 24);
     if (debugOn) {
       log('evaluate pattern:', 'info');
@@ -269,7 +269,7 @@ playBtn.onclick = async () => {
     const st = getState();
     if (st.evalError) {
       // ошибка уже улетела в лог через 'strudel.log'; дублируем в статус крупно
-      reportError('Code is nor running (Strudel error)', st.evalError);
+      reportError('Code is not running (Strudel error)', st.evalError);
       return; // НЕ стартуем — играет прежний валидный паттерн (или тишина)
     }
 
@@ -342,7 +342,7 @@ shareBtn.onclick = async () => {
         log('mp4 ready (' + (mp4.size / 1024 / 1024).toFixed(1) + ' MB)', 'ok');
       } catch (convErr) {
         // если конвертация упала (память/сеть на слабом устройстве) — отдаём webm
-        reportError('Convertating failed, giving webm', convErr);
+        reportError('Converting failed, giving webm', convErr);
         downloadBlob(blob, 'av-clip.webm');
       }
     }

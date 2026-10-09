@@ -96,6 +96,11 @@ function scan(code) {
 }
 
 // раздаёт готовые имена юниформов ("u"+Имя), отсекая коллизии (два тега -> одно Имя)
+// имена, которые движок объявляет сам — тег не может их занять
+// (иначе .vis("dResolution") даст повторное объявление uResolution, а
+// .vis("dTime") молча перетрёт глобальный uTime)
+const RESERVED_BASES = new Set([...Object.keys(uniforms), 'uResolution']);
+
 function resolveBases(parsedTags) {
   const usedBase = new Map(); // base -> tag, который его занял
   const resolved = [];
@@ -103,6 +108,10 @@ function resolveBases(parsedTags) {
   for (const item of parsedTags) {
     if (item.error) { warnings.push(item.error); continue; }
     const base = 'u' + item.name;
+    if (RESERVED_BASES.has(base)) {
+      warnings.push(`тег .vis("${item.tag}"): ${base} — встроенный юниформ движка, выбери другое Имя — пропущен`);
+      continue;
+    }
     if (usedBase.has(base)) {
       warnings.push(`тег .vis("${item.tag}"): юниформ ${base} уже занят тегом "${usedBase.get(base)}" — пропущен`);
       continue;

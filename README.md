@@ -23,7 +23,9 @@ src/
   bridge.js          CORE: maps pattern events → shader uniforms. Your logic lives here.
   renderer.js        WebGL2: shader compilation, render loop, uniforms (engine, don't touch)
   recorder.js        Canvas + audio recording to .webm, length = even number of cycles
-  editor.js          CodeMirror (pattern + shader)
+  editor.js          CodeMirror (pattern + shader), uniform autocomplete
+  highlight.js       Highlighting of currently playing notes in the pattern editor
+  mp4.js             webm → mp4 conversion via ffmpeg.wasm (lazy-loaded from CDN)
   scenes/default.js  Default scene { pattern, shader }
 ```
 The engine modules (audio, renderer, recorder, editor) rarely need
@@ -51,7 +53,9 @@ note("c5 e5").s("triangle").vis("pArp")       // → uArp
 `i`-tagged channels are ONE struct uniform (WebGL2 struct uniforms, native
 support) with `.vel`/`.pitch` fields — not two separate names. Two different
 tags resolving to the same Name (e.g. `dPad` and `iPad`, both → `uPad`)
-collide; the second one is skipped with a warning.
+collide; the second one is skipped with a warning. Names of built-in uniforms
+(`uTime`, `uPitch`, `uHue`, `uEnergy`, `uBeat`, `uLoop`, `uBeatFrac`, `uResolution`)
+are reserved — a tag like `.vis("dTime")` is skipped with a warning.
 
 The shader editor autocompletes: type `uLe` to see `uLead` from the tags
 currently in the pattern editor, type `uLead.` to see `.vel`/`.pitch` — live,
