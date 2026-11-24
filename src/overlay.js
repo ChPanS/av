@@ -80,10 +80,49 @@ function wrappedRows(pane, columns) {
   return rows;
 }
 
+function fitLayout(ctx, pane, scale, innerWidth, innerHeight, sizeFactor, minSize, maxSize) {
+  pane.frames ??= new Map();
+  const key = [scale, innerWidth, innerHeight, sizeFactor].join(':');
+  if (pane.frames.has(key)) return pane.frames.get(key);
+
+  function layout(size) {
+    const font = size + 'px "JetBrains Mono", monospace';
+    ctx.font = font;
+    const columns = Math.max(1, Math.floor(innerWidth / ctx.measureText('M').width));
+    const rows = wrappedRows(pane, columns);
+    const lineHeight = size * 1.36;
+    const capacity = Math.max(1, Math.floor(innerHeight / lineHeight) - 1);
+    return { font, rows, lineHeight, capacity };
+  }
+
+  const nominal = scale * minSize;
+  let minimum = nominal;
+  let result = layout(nominal);
+  const fits = candidate => candidate.rows.length <= candidate.capacity;
+  if (!fits(result)) {
+    const maxRows = pane.lines.reduce((sum, line) => sum + Math.max(1, line.text.length), 0);
+    let low = innerHeight / ((maxRows + 2) * 1.36);
+    let high = nominal;
+    for (let i = 0; i < 16; i++) {
+      const middle = (low + high) / 2;
+      if (fits(layout(middle))) low = middle;
+      else high = middle;
+    }
+    minimum = low;
+    result = layout(minimum);
+  }
+  if (sizeFactor > 0) result = layout(minimum + sizeFactor * (scale * maxSize - minimum));
+  if (pane.frames.size >= 4) pane.frames.delete(pane.frames.keys().next().value);
+  pane.frames.set(key, result);
+  return result;
+}
+
 export function createOverlay(shader, overlay, patternEd, shaderEd, highlighter, activePattern) {
   const preview = overlay.getContext('2d');
   const input = id => document.getElementById(id);
   const controls = ['overlay-source', 'overlay-scope', 'overlay-corner', 'overlay-size', 'overlay-opacity'].map(input);
+  const minSize = Number(controls[3].min);
+  const maxSize = Number(controls[3].max);
   let cached;
 
   function config() {
@@ -94,7 +133,7 @@ export function createOverlay(shader, overlay, patternEd, shaderEd, highlighter,
     const panes = [];
     if (source !== 'glsl') panes.push(snapshot(patternEd, 'Strudel', scope === 'full'));
     if (source !== 'strudel') panes.push(snapshot(shaderEd, 'GLSL', scope === 'full'));
-    cached = { key, panes, corner, size: Number(size), opacity: Number(opacity) / 100, pattern: patternEd.view.state.doc, shader: shaderEd.view.state.doc };
+    cached = { key, panes, corner, sizeFactor: (Number(size) - minSize) / (maxSize - minSize), opacity: Number(opacity) / 100, pattern: patternEd.view.state.doc, shader: shaderEd.view.state.doc };
     return cached;
   }
 
@@ -105,13 +144,11 @@ export function createOverlay(shader, overlay, patternEd, shaderEd, highlighter,
     const paneWidth = (width * (options.panes.length > 1 ? 0.94 : 0.68) - margin * (options.panes.length - 1)) / options.panes.length;
     const padding = Math.max(8, margin * 0.55);
     for (const [index, pane] of options.panes.entries()) {
-      const size = Math.min(width, height) * options.size / 590;
-      if (size <= 0) continue;
-      ctx.font = size + 'px "JetBrains Mono", monospace';
-      const columns = Math.max(1, Math.floor((paneWidth - padding * 2) / ctx.measureText('M').width));
-      const rows = wrappedRows(pane, columns);
-      const lineHeight = size * 1.36;
-      const capacity = Math.max(1, Math.floor((height * 0.84 - padding * 2) / lineHeight) - 1);
+      const innerWidth = paneWidth - padding * 2;
+      const innerHeight = height * 0.84 - padding * 2;
+      if (innerWidth <= 0 || innerHeight <= 0) continue;
+      const { font, rows, lineHeight, capacity } = fitLayout(ctx, pane,
+        Math.min(width, height) / 590, innerWidth, innerHeight, options.sizeFactor, minSize, maxSize);
       const matches = pane.name === 'Strudel' && pane.document === activePattern();
       const visibleNotes = matches ? active.filter(range => range.expire > now) : [];
       const playingRow = visibleNotes.length ? rows.findIndex(line => visibleNotes.some(range => range.from < line.to && range.to > line.from)) : -1;
@@ -127,7 +164,7 @@ export function createOverlay(shader, overlay, patternEd, shaderEd, highlighter,
       ctx.beginPath();
       ctx.rect(x, y, paneWidth, boxHeight);
       ctx.clip();
-      ctx.font = size + 'px "JetBrains Mono", monospace';
+      ctx.font = font;
       ctx.textBaseline = 'top';
       ctx.fillStyle = '#aee688';
       const label = rows.length > capacity ? pane.name + '  ' + (pageStart + 1) + '–' + (pageStart + shownRows.length) + '/' + rows.length : pane.name;
