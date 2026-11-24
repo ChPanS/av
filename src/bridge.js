@@ -193,6 +193,19 @@ const HUE_TAU = 0.2;      // ~= старое 0.08/кадр при 60fps
 
 // dt в секундах (реальное время кадра, НЕ подразумевает 60fps) -> гасит
 // огибающие и ведёт hue к цели. Питч-каналы (kind:'pitch') не гаснут вообще.
+export function resetVisualState() {
+  for (const key of Object.keys(uniforms)) uniforms[key] = 0;
+  hueTarget = 0;
+}
+
+export function uniformSource(key) {
+  const entry = [...channelIndex].find(([, { chans }]) => Object.hasOwn(chans, key));
+  if (!entry) return '';
+  const [tag, { chans }] = entry;
+  const tau = tauByKey[key];
+  return '.vis("' + tag + '") · ' + (chans[key] === 'pitch' ? 'holds last pitch' : 'decay τ ' + tau.toFixed(3) + ' s');
+}
+
 export function decayUniforms(dt) {
   dt = (typeof dt === 'number' && isFinite(dt)) ? Math.max(0, Math.min(0.25, dt)) : 0.016;
 

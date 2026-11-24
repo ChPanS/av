@@ -15,6 +15,14 @@ Open http://localhost:5173 and press play (the first click initializes audio —
 a browser requirement). Edit the code in either editor and press play again —
 changes take effect immediately.
 
+## Editing and exporting
+
+- Use **Both** for side-by-side editors, **Focus** for a full-width editor, and **A− / A+** to size the text. Drag a divider to resize either split. GLSL errors highlight the corresponding line when the compiler reports a source location.
+- Set **From** and **To** to select an inclusive range of cycles. Drag the timeline to jump, enable **Loop range** to rehearse it, or save the range as a named section. The scale uses the pattern's `// loop: N` (24 cycles by default).
+- Open **Code overlay & video** to show Strudel, GLSL or both, with a selected excerpt or the full source. Choose the corner, text size and backdrop opacity. An empty selection shows the first 16 lines. Strudel note highlights appear on the overlay while playing.
+- Open **.vis() monitor** to inspect the active signals, their recent values, and the tag and source line that produced them.
+- Apply changes with **play / update**, then choose **export range**. The video uses the preview's aspect ratio, the selected resolution and frame rate, and includes the code overlay and Strudel audio. MP4 is preferred; WebM is also available. The browser records in real time, with a short audio pre-roll and reconstructed visual state at the start of the range.
+
 ## Project Structure
 ```
 src/

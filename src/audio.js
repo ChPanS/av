@@ -35,8 +35,10 @@ let initialized = false;
 // --- часы лупа (для uBeat) -------------------------------------------
 // Ведём текущий цикл от событий паттерна: у hap есть whole.begin (номер цикла).
 // Между событиями интерполируем по времени и cps. mod на длину лупа -> сброс в 0.
-let anchorCycle = 0;           // номер цикла в момент anchorTime
-let anchorTime = 0;            // время AudioContext, к которому привязан anchorCycle
+let sourcePattern;
+let playbackRange;
+let generation = 0;
+let stopAt = Infinity;
 let loopCycles = 24;           // длина лупа в циклах (из "// loop: N" в паттерне)
 
 // --- мастер-цепочка: громкость + ответвление на запись ----------------
@@ -77,36 +79,56 @@ export function setLoopCycles(n) {
 
 // текущее положение в лупе: { beat: 0..loopCycles, loop: 0..1, frac: 0..1 }
 export function getClock() {
-  if (anchorTime === 0) return null;
-  const cps = getCps();
-  const cyc = anchorCycle + (getAudioContext().currentTime - anchorTime) * cps;
-  const inLoop = ((cyc % loopCycles) + loopCycles) % loopCycles;
-  return { beat: inLoop, loop: inLoop / loopCycles, frac: cyc - Math.floor(cyc) };
+  if (!scheduler?.started || scheduler.seconds_at_cps_change === undefined) return null;
+  const elapsed = getAudioContext().currentTime - scheduler.seconds_at_cps_change - scheduler.latency;
+  const cycle = scheduler.num_cycles_at_cps_change + elapsed * getCps();
+  const position = playbackRange && cycle >= playbackRange.from
+    ? playbackRange.from + (cycle - playbackRange.from) % (playbackRange.to - playbackRange.from)
+    : Math.max(0, cycle);
+  const beat = position % loopCycles;
+  return { cycle, position, beat, loop: beat / loopCycles, frac: position % 1, seconds: position / getCps() };
 }
 
-// кастомный вывод: звук + визуальное событие + обновление часов лупа
 function makeOutput() {
-  return (...args) => {
-    // сигнатура: (hap, deadline, duration, cps, t)
-    const hap = args[0];
-    const deadline = args[1] ?? 0;
-    // звук
-    webaudioOutput(...args);
-
-    // якорь часов: цикл события + момент его звучания
-    const begin = hap?.whole?.begin;
-    const cyc = typeof begin?.valueOf === 'function' ? begin.valueOf() : begin;
-    if (typeof cyc === 'number' && isFinite(cyc)) {
-      anchorCycle = cyc;
-      anchorTime = getAudioContext().currentTime + deadline;
-    }
-
-    // визуал — откладываем на deadline, чтобы совпасть со звуком
-    if (hapCallback) {
-      const ms = Math.max(0, deadline * 1000);
-      setTimeout(() => hapCallback(hap), ms);
-    }
+  return (hap, deadline, duration, cps, time) => {
+    const cycle = Number(hap.whole?.begin);
+    if (cycle >= stopAt) return;
+    webaudioOutput(hap, deadline, duration, cps, time);
+    const currentGeneration = generation;
+    const delay = Math.max(0, (time - getAudioContext().currentTime) * 1000);
+    setTimeout(() => {
+      if (generation === currentGeneration) hapCallback?.(hap);
+    }, delay);
   };
+}
+
+function repeatRange(pattern, { from, to }) {
+  const length = to - from;
+  return new Pattern(state => {
+    const haps = [];
+    const end = Number(state.span.end);
+    for (let start = Number(state.span.begin); start < end;) {
+      const shift = Math.max(0, Math.floor((start - from) / length)) * length;
+      const next = Math.min(end, to + shift);
+      if (next <= start) break;
+      const span = new strudelCore.TimeSpan(start - shift, next - shift);
+      for (const hap of pattern.query(state.setSpan(span))) {
+        haps.push(hap.withSpan(part => part.withTime(t => t.add(shift))));
+      }
+      start = next;
+    }
+    return haps;
+  });
+}
+
+export function getHistory(until, from = 0) {
+  const events = [];
+  for (let cycle = from; sourcePattern && cycle < until; cycle++) {
+    const next = Math.min(cycle + 1, until);
+    events.push(...sourcePattern.queryArc(cycle, next, { _cps: getCps(), cyclist: 'cyclist' })
+      .filter(hap => hap.hasOnset()));
+  }
+  return events.sort((a, b) => Number(a.whole.begin) - Number(b.whole.begin));
 }
 
 // делает каждое имя звука из soundMap методом паттерна (.piano(), .casio() ...)
@@ -214,16 +236,28 @@ export function setHapCallback(cb) {
 export async function evaluatePattern(code) {
   if (!evaluate) throw new Error('audio не инициализирован');
   await getAudioContext().resume();
-  await evaluate(code); // парсит + ставит активный паттерн в scheduler
+  await evaluate(code, false);
+  if (!replState.evalError) {
+    sourcePattern = scheduler.pattern;
+    if (playbackRange) scheduler.pattern = repeatRange(sourcePattern, playbackRange);
+  }
 }
 
-export function start() {
-  if (scheduler) scheduler.start();
+export async function start({ from = 0, repeat = null, end = Infinity } = {}) {
+  playbackRange = repeat;
+  stopAt = end;
+  scheduler.pattern = repeat ? repeatRange(sourcePattern, repeat) : sourcePattern;
+  scheduler.lastEnd = from;
+  await scheduler.start();
 }
 
 export function stop() {
-  if (scheduler) scheduler.stop();
-  anchorTime = 0; // часы лупа сброшены
+  generation++;
+  if (scheduler) {
+    scheduler.stop();
+    strudelWebaudio.resetGlobalEffects();
+  }
+  playbackRange = null;
 }
 
 export function isInitialized() {

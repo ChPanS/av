@@ -8,6 +8,7 @@ let gl, canvas, program, vao;
 let startTime = performance.now();
 let lastFrameTime = performance.now();
 let rafId = null;
+let frameObserver;
 let clockProvider = null; // () => { beat, loop, frac } | null
 const uLoc = {}; // кэш локаций юниформов
 
@@ -35,7 +36,9 @@ precision highp float;
 ${uniformDecls()}
 out vec4 outColor;
 
+#line 1 1
 ${userBody}
+#line 1 2
 
 void main() {
   vec4 c = vec4(0.0);
@@ -77,8 +80,8 @@ export function initRenderer(canvasEl) {
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2); // на ретине не раздуваем
-  const w = canvas.clientWidth * dpr;
-  const h = canvas.clientHeight * dpr;
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
@@ -97,6 +100,8 @@ export function loadShader(userBody) {
     gl.attachShader(prog, fs);
     gl.bindAttribLocation(prog, 0, 'a_pos');
     gl.linkProgram(prog);
+    gl.deleteShader(fs);
+    gl.deleteShader(vs);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
       const log = gl.getProgramInfoLog(prog);
       gl.deleteProgram(prog);
@@ -130,6 +135,7 @@ function frame() {
   if (clockProvider) {
     const c = clockProvider();
     if (c) {
+      uniforms.uTime = c.seconds;
       uniforms.uBeat = c.beat;
       uniforms.uLoop = c.loop;
       uniforms.uBeatFrac = c.frac;
@@ -155,6 +161,7 @@ function frame() {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
+  frameObserver?.(now);
   decayUniforms(dt);
   rafId = requestAnimationFrame(frame);
 }
@@ -170,3 +177,5 @@ export function startRenderLoop() {
 export function getCanvas() {
   return canvas;
 }
+
+export function observeFrames(callback) { frameObserver = callback; }

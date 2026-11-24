@@ -3,8 +3,8 @@
 //  - Shift-Tab: убрать отступ
 //  - Ctrl/Cmd-Enter: запустить (onRun), БЕЗ вставки переноса строки
 import { EditorView, basicSetup } from 'codemirror';
-import { keymap } from '@codemirror/view';
-import { Prec } from '@codemirror/state';
+import { keymap, Decoration } from '@codemirror/view';
+import { Prec, StateEffect, StateField } from '@codemirror/state';
 import { indentUnit } from '@codemirror/language';
 import { indentWithTab } from '@codemirror/commands';
 import { acceptCompletion } from '@codemirror/autocomplete';
@@ -48,6 +48,20 @@ function uniformCompletionSource(getCatalog) {
   };
 }
 
+const shaderErrors = StateEffect.define();
+const errorDecoration = Decoration.line({ class: 'cm-shader-error' });
+const errorField = StateField.define({
+  create: () => Decoration.none,
+  update(value, transaction) {
+    if (transaction.docChanged) value = Decoration.none;
+    for (const effect of transaction.effects) {
+      if (effect.is(shaderErrors)) value = effect.value;
+    }
+    return value;
+  },
+  provide: field => EditorView.decorations.from(field),
+});
+
 export function createEditor(parent, doc, kind /* 'js' | 'glsl' */, onRun, getUniformCatalog) {
   const lang = kind === 'glsl' ? cpp() : javascript();
   // подсветка играющих нот — только для редактора паттерна (js)
@@ -80,19 +94,34 @@ export function createEditor(parent, doc, kind /* 'js' | 'glsl' */, onRun, getUn
       lang,
       oneDark,
       ...hl,
+      ...(kind === 'glsl' ? [errorField] : []),
       ...uniformHints,
       indentUnit.of('  '),       // отступ 2 пробела
       EditorView.theme({
-        '&': { height: '100%', fontSize: '13px' },
+        '&': { height: '100%', fontSize: 'var(--editor-font, 16px)', lineHeight: '1.55' },
+        '.cm-content': { padding: '12px 0', caretColor: '#c6ff2e' },
+        '.cm-line': { padding: '0 8px' },
+        '.cm-shader-error': { backgroundColor: '#74283466', boxShadow: 'inset 3px 0 #ff7888' },
+        '.cm-gutters': { minWidth: '45px', padding: '12px 0' },
         '.cm-scroller': { fontFamily: "'JetBrains Mono', ui-monospace, monospace" },
       }),
-      EditorView.lineWrapping,
     ],
   });
 
   return {
     get: () => view.state.doc.toString(),
     set: (text) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }),
+    range: () => {
+      const { from, to } = view.state.selection.main;
+      return [from, to];
+    },
+    errors(message) {
+      if (kind !== 'glsl') return;
+      const lines = new Set([...String(message ?? '').matchAll(/(?:ERROR|WARNING):\s*1:(\d+)/g)].map(match => Number(match[1])));
+      const ranges = [...lines].filter(n => n > 0 && n <= view.state.doc.lines)
+        .map(n => errorDecoration.range(view.state.doc.line(n).from));
+      view.dispatch({ effects: shaderErrors.of(Decoration.set(ranges, true)) });
+    },
     view,
   };
 }

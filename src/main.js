@@ -13,14 +13,17 @@ if (import.meta.env.DEV) {
 import {
   initAudio, setHapCallback, setStateCallback, getState,
   evaluatePattern, start, stop, isInitialized, getCps, getRecorderStream,
-  getClock, setLoopCycles, setMasterVolume,
+  getClock, setLoopCycles, setMasterVolume, getHistory,
 } from './audio.js';
-import { initRenderer, loadShader, startRenderLoop, getCanvas, setClockProvider } from './renderer.js';
-import { handleHap, syncTags, scanUniformCatalog } from './bridge.js';
+import { initRenderer, loadShader, startRenderLoop, setClockProvider, observeFrames } from './renderer.js';
+import { handleHap, syncTags, scanUniformCatalog, resetVisualState, decayUniforms } from './bridge.js';
 import { createHighlighter } from './highlight.js';
 import { createEditor } from './editor.js';
-import { computeClipDuration, recordClip, downloadBlob } from './recorder.js';
+import { recordingMime, recordClip, downloadBlob } from './recorder.js';
 import { convertWebmToMp4 } from './mp4.js';
+import { createOverlay } from './overlay.js';
+import { createTimeline } from './timeline.js';
+import { createMonitor } from './monitor.js';
 import { defaultScene } from './scenes/default.js';
 
 const $ = (id) => document.getElementById(id);
@@ -45,18 +48,11 @@ const paneShader = $('pane-shader');
 
 // ---------- редакторы ----------
 const loaded = loadFromHash() || defaultScene;
+let appliedShader = '';
 const runFromEditor = () => playBtn.click();
 const patternEd = createEditor(panePattern, loaded.pattern, 'js', runFromEditor);
 const shaderEd = createEditor(paneShader, loaded.shader, 'glsl', runFromEditor, () => scanUniformCatalog(patternEd.get()));
 const highlighter = createHighlighter(patternEd.view); // подсветка играющих нот
-
-// Задел под будущую кнопку «совмещение»: кладёт редактор (с подсветкой) поверх
-// рендера. Сейчас не привязано к кнопке — вызывать setEditorOverlay(true/false).
-// Для полноэкранного режима кнопка дополнительно дёрнет requestFullscreen на #stage.
-function setEditorOverlay(on) {
-  document.querySelector('main')?.classList.toggle('overlay-mode', !!on);
-}
-window.__setEditorOverlay = setEditorOverlay; // временный доступ для теста из консоли
 
 // ---------- вкладки + мобильный аккордеон ----------
 const leftSection = $('left');
@@ -97,6 +93,61 @@ function onTab(which) {
 tabPattern.onclick = () => onTab('pattern');
 tabShader.onclick = () => onTab('shader');
 setTab('pattern'); // на мобиле стартуем свёрнутыми (mobileOpen=false)
+
+const workspace = document.querySelector('main');
+const split = $('split');
+const focus = $('editor-full');
+const measureEditors = () => {
+  patternEd.view.requestMeasure();
+  shaderEd.view.requestMeasure();
+};
+split.onclick = () => {
+  const enabled = leftSection.classList.toggle('split');
+  split.setAttribute('aria-pressed', String(enabled));
+  if (enabled) setOpen(true);
+  measureEditors();
+};
+focus.onclick = () => {
+  const enabled = workspace.classList.toggle('editor-focus');
+  focus.setAttribute('aria-pressed', String(enabled));
+  if (enabled) setOpen(true);
+  measureEditors();
+};
+
+let font = 16;
+try { font = Math.max(12, Math.min(28, Number(localStorage.getItem('av-editor-font')) || 16)); } catch {}
+function fontSize(delta) {
+  font = Math.max(12, Math.min(28, font + delta));
+  leftSection.style.setProperty('--editor-font', font + 'px');
+  try { localStorage.setItem('av-editor-font', String(font)); } catch {}
+  measureEditors();
+}
+$('font-down').onclick = () => fontSize(-1);
+$('font-up').onclick = () => fontSize(1);
+fontSize(0);
+
+function addDivider(divider, container, property, initial) {
+  let percent = initial;
+  function resize(value) {
+    percent = Math.min(75, Math.max(25, value));
+    container.style.setProperty(property, percent + '%');
+    divider.setAttribute('aria-valuenow', String(Math.round(percent)));
+    measureEditors();
+  }
+  divider.onpointerdown = event => divider.setPointerCapture(event.pointerId);
+  divider.onpointermove = event => {
+    if (!divider.hasPointerCapture(event.pointerId)) return;
+    const bounds = container.getBoundingClientRect();
+    resize(100 * (event.clientX - bounds.left) / bounds.width);
+  };
+  divider.onkeydown = event => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    resize(percent + (event.key === 'ArrowLeft' ? -3 : 3));
+  };
+}
+addDivider($('workspace-divider'), workspace, '--workspace-width', 48);
+addDivider($('code-divider'), panePattern.parentElement, '--code-width', 50);
 
 // ---------- лог / дебаг ----------
 let debugOn = false;
@@ -192,10 +243,12 @@ if (epiOk) {
 // компиляция шейдера из редактора; true = успех
 function applyShader(silent = false) {
   const err = loadShader(shaderEd.get());
+  shaderEd.errors(err);
   if (err) {
     reportError('Shader error', new Error(err));
     return false;
   }
+  appliedShader = shaderEd.get();
   if (!silent) log('shader compiled', 'ok');
   return true;
 }
@@ -208,7 +261,7 @@ function setHapCallbackSafe() {
     handleHap(hap);
     // подсветка играющих нот: зажигаем позиции в коде на длительность ноты
     const locs = hap?.context?.locations;
-    if (locs) {
+    if (locs && patternEd.get() === appliedPattern) {
       let holdMs = 140;
       try {
         const b = hap.whole?.begin, e = hap.whole?.end;
@@ -233,10 +286,71 @@ function setHapCallbackSafe() {
   });
 }
 
-let started = false; // своя метка состояния (не полагаемся на внутренности scheduler)
+let started = false;
+let appliedPattern = '';
+let exporting;
+let captured;
+let lastTimeline = 0;
+let cueRevision = 0;
+
+function seedVisuals(from) {
+  resetVisualState();
+  let previous = 0;
+  const cps = getCps();
+  function advance(to) {
+    let seconds = Math.max(0, Math.min(30, (to - previous) / cps));
+    while (seconds > 0) {
+      const step = Math.min(0.25, seconds);
+      decayUniforms(step);
+      seconds -= step;
+    }
+    previous = to;
+  }
+  for (const hap of getHistory(from)) {
+    advance(Number(hap.whole.begin));
+    handleHap(hap);
+  }
+  advance(from);
+}
+
+async function seek(cycle) {
+  if (!started || exporting) return;
+  const revision = ++cueRevision;
+  try {
+    stop();
+    highlighter.clear();
+    seedVisuals(cycle);
+    const repeat = timeline.repeat();
+    await start({ from: cycle, repeat: repeat && cycle < repeat.to ? repeat : null });
+    if (revision === cueRevision) setStatus('playing · cycle ' + (cycle + 1));
+  } catch (error) {
+    if (revision === cueRevision) reportError('Could not seek', error);
+  }
+}
+
+const timeline = createTimeline($, seek);
+timeline.setLength(loopLength(loaded.pattern));
+setLoopCycles(loopLength(loaded.pattern));
+timeline.update(null);
+const overlay = createOverlay(canvas, $('code-overlay'), patternEd, shaderEd, highlighter, () => appliedPattern);
+const monitor = createMonitor($('signal-panel'), $('signal-list'), $('signal-source'), () => appliedPattern || patternEd.get());
+observeFrames(now => {
+  overlay.preview(now);
+  captured?.draw(now);
+  monitor(now);
+  if (now - lastTimeline > 100) {
+    lastTimeline = now;
+    timeline.update(getClock());
+  }
+});
+
+function loopLength(code) {
+  return Math.min(10000, Math.max(1, Number(code.match(/\/\/\s*loop:\s*(\d+)/i)?.[1]) || 24));
+}
 
 // ---------- PLAY = применить код + запустить (live update) ----------
 playBtn.onclick = async () => {
+  if (exporting) return;
   try {
     playBtn.disabled = true;
 
@@ -258,8 +372,7 @@ playBtn.onclick = async () => {
     // 2) паттерн (live). ВАЖНО: evaluate НЕ бросает исключение при ошибке кода —
     //    он пишет её в state.evalError. Поэтому проверяем состояние вручную.
     // длина лупа для uBeat: из комментария "// loop: N" в паттерне (иначе 24)
-    const loopMatch = code.match(/\/\/\s*loop:\s*(\d+)/i);
-    setLoopCycles(loopMatch ? parseInt(loopMatch[1], 10) : 24);
+    const length = loopLength(code);
     if (debugOn) {
       log('evaluate pattern:', 'info');
       code.split('\n').forEach((l) => log('  ' + l, 'info'));
@@ -274,8 +387,14 @@ playBtn.onclick = async () => {
     }
 
     // 3) запуск (один раз; повторный play обновляет паттерн вживую)
+    setLoopCycles(length);
+    timeline.setLength(length);
+    appliedPattern = code;
     if (!started) {
-      start();
+      const repeat = timeline.repeat();
+      const from = repeat?.from ?? timeline.cue();
+      seedVisuals(from);
+      await start({ from, repeat });
       started = true;
     }
 
@@ -291,7 +410,13 @@ playBtn.onclick = async () => {
 
 // ---------- STOP ----------
 stopBtn.onclick = () => {
+  cueRevision++;
+  if (exporting) {
+    exporting.abort();
+    return;
+  }
   stop();
+  highlighter.clear();
   started = false;
   setStatus('stopped');
   log('stop', 'info');
@@ -306,50 +431,75 @@ fsBtn.onclick = () => {
 
 // ---------- SHARE: видео по циклам ----------
 shareBtn.onclick = async () => {
-  if (!started) {
-    setStatus('press play first — playing audio is needed', true);
+  if (!started || !appliedPattern) {
+    setStatus('Press play to apply the pattern before exporting.', true);
     return;
   }
-  const cps = getCps();
-  const { seconds, cycles } = computeClipDuration(cps, 60);
+  if (exporting) return;
+  if (patternEd.get() !== appliedPattern || shaderEd.get() !== appliedShader) {
+    setStatus('Press play / update to apply your edits before exporting.', true);
+    return;
+  }
+  const format = $('video-format').value;
+  const mime = recordingMime(format);
+  if (!mime) {
+    setStatus('Video recording is unavailable in this browser.', true);
+    return;
+  }
+  const range = timeline.range();
+  if ((range.to - range.from) / getCps() > 300) {
+    setStatus('Choose a range up to 5 minutes.', true);
+    return;
+  }
+  exporting = new AbortController();
+  timeline.disable(true);
+  shareBtn.disabled = playBtn.disabled = true;
   try {
-    shareBtn.disabled = true;
-    log(`making clip: ${seconds.toFixed(1)}с, ${Math.round(cycles)} cycles`, 'info');
-    setStatus(`recording ${seconds.toFixed(1)}с (${Math.round(cycles)} cycles)…`);
+    stop();
+    highlighter.clear();
+    const warmup = Math.max(0, range.from - Math.min(4, Math.ceil(1.5 * getCps())));
+    seedVisuals(warmup);
+    captured = overlay.capture(Number($('video-height').value));
+    captured.draw(performance.now());
+    setStatus('Preparing cycles ' + (range.from + 1) + '–' + range.to + '…');
+    await start({ from: warmup, end: range.to });
     const blob = await recordClip({
-      canvas: getCanvas(),
-      audioStream: getRecorderStream(),
-      durationSec: seconds,
-      fps: 60,
-      onProgress: (p) => setStatus(`recording… ${Math.round(p * 100)}%`),
+      canvas: captured.canvas, audioStream: getRecorderStream(), mime,
+      fps: Number($('video-fps').value), getClock, ...range, signal: exporting.signal,
+      onProgress: progress => setStatus('Recording… ' + Math.round(progress * 100) + '%'),
     });
-    // нативный mp4 (Safari/новые Chrome) -> отдаём сразу, без конвертации
-    if (blob.type.includes('mp4')) {
-      downloadBlob(blob, 'av-clip.mp4');
-      setStatus('ready — mp4 downloaded');
-      log('clip is ready (native mp4, ' + (blob.size / 1024 / 1024).toFixed(1) + ' МБ)', 'ok');
-    } else {
-      // webm -> конвертируем в mp4 через ffmpeg.wasm (ленивая загрузка ~31МБ)
-      setStatus('converting webm → mp4 (loading ~31MB core)…');
-      log('converting webm → mp4 with ffmpeg.wasm…', 'info');
+    stop();
+    captured = null;
+    started = false;
+    stopBtn.disabled = true;
+    const filename = 'av-' + (range.from + 1) + '-' + range.to;
+    if (format === 'mp4' && !blob.type.includes('mp4')) {
+      setStatus('Converting to MP4…');
       try {
         const mp4 = await convertWebmToMp4(blob, {
-          onProgress: (p) => setStatus('converting… ' + Math.round(p * 100) + '%'),
-          onLog: (m) => { if (debugOn) log('[ffmpeg] ' + m, 'cmd'); },
+          onProgress: progress => setStatus('Converting… ' + Math.round(progress * 100) + '%'),
         });
-        downloadBlob(mp4, 'av-clip.mp4');
-        setStatus('ready — mp4 downloaded');
-        log('mp4 ready (' + (mp4.size / 1024 / 1024).toFixed(1) + ' MB)', 'ok');
-      } catch (convErr) {
-        // если конвертация упала (память/сеть на слабом устройстве) — отдаём webm
-        reportError('Converting failed, giving webm', convErr);
-        downloadBlob(blob, 'av-clip.webm');
+        downloadBlob(mp4, filename + '.mp4');
+        setStatus('MP4 downloaded');
+      } catch (error) {
+        downloadBlob(blob, filename + '.webm');
+        reportError('MP4 conversion failed; WebM downloaded', error);
       }
+    } else {
+      const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      downloadBlob(blob, filename + '.' + extension);
+      setStatus(extension.toUpperCase() + ' downloaded');
     }
-  } catch (e) {
-    reportError('Making clip failed', e);
+  } catch (error) {
+    if (error.name === 'AbortError') setStatus('Export cancelled');
+    else reportError('Export failed', error);
   } finally {
-    shareBtn.disabled = false;
+    stop();
+    started = false;
+    captured = null;
+    exporting = null;
+    timeline.disable(false);
+    stopBtn.disabled = shareBtn.disabled = playBtn.disabled = false;
   }
 };
 

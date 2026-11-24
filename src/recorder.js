@@ -1,94 +1,109 @@
-// Запись AV-клипа: видео с canvas + аудио из Strudel.
-// Длина подбирается как целое ЧЁТНОЕ число музыкальных циклов,
-// чтобы клип закольцовывался без шва, но не длиннее maxSeconds.
+import fixWebmDuration from 'fix-webm-duration';
 
-function pickMime() {
-  const candidates = [
-    'video/mp4;codecs=h264,aac',   // нативный mp4 (Safari, новые Chrome) — без конвертации
-    'video/mp4',
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
-  ];
-  for (const m of candidates) {
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
-  }
-  return '';
+export function recordingMime(format) {
+  const mp4 = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4'];
+  const webm = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  return (format === 'mp4' ? [...mp4, ...webm] : webm)
+    .find(mime => globalThis.MediaRecorder?.isTypeSupported(mime));
 }
 
-// вычисляем длительность клипа в секундах
-export function computeClipDuration(cps, maxSeconds = 60) {
-  const cycleDur = 1 / cps; // секунд в одном цикле
-  let cycles = Math.floor(maxSeconds / cycleDur);
-  if (cycles % 2 !== 0) cycles -= 1; // делаем чётным
-  if (cycles >= 2) {
-    return { seconds: cycles * cycleDur, cycles };
-  }
-  // цикл слишком длинный — не влезает даже 2. Берём 1 цикл или maxSeconds.
-  const fallback = Math.min(maxSeconds, cycleDur);
-  return { seconds: fallback, cycles: fallback / cycleDur };
-}
-
-// canvas: HTMLCanvasElement, audioStream: MediaStream | null
-// возвращает Promise<Blob>
-export function recordClip({ canvas, audioStream, durationSec, fps = 60, onProgress }) {
+export function recordClip({ canvas, audioStream, mime, fps, from, to, getClock, signal, onProgress }) {
   return new Promise((resolve, reject) => {
-    const mime = pickMime();
-    if (!mime) {
-      reject(new Error('MediaRecorder/webm не поддерживается этим браузером'));
+    if (!mime || !canvas.captureStream || !audioStream?.getAudioTracks().length) {
+      reject(new Error('Audio/video recording is unavailable in this browser.'));
       return;
     }
-
-    const videoStream = canvas.captureStream(fps);
-    const tracks = [...videoStream.getVideoTracks()];
-    if (audioStream) tracks.push(...audioStream.getAudioTracks());
-    const combined = new MediaStream(tracks);
-
-    const chunks = [];
+    const video = canvas.captureStream(fps).getVideoTracks()[0];
+    const stream = new MediaStream([video, ...audioStream.getAudioTracks()]);
     let recorder;
     try {
-      recorder = new MediaRecorder(combined, {
-        mimeType: mime,
-        videoBitsPerSecond: 8_000_000,
-      });
-    } catch (e) {
-      reject(e);
+      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: canvas.height >= 1080 ? 12_000_000 : 7_000_000 });
+    } catch (error) {
+      video.stop();
+      reject(error);
       return;
     }
 
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data);
+    const chunks = [];
+    const timeout = performance.now() + 12000;
+    let timer;
+    let lastCycle;
+    let lastMotion = performance.now();
+    let stopping = false;
+    let startedAt;
+    let duration;
+    const cleanup = () => {
+      clearInterval(timer);
+      signal.removeEventListener('abort', abort);
+      video.stop();
     };
-    recorder.onerror = (e) => reject(e.error || new Error('ошибка записи'));
+    const abort = () => {
+      if (recorder.state !== 'inactive') recorder.stop();
+      cleanup();
+      reject(new DOMException('Export cancelled', 'AbortError'));
+    };
+
+    recorder.ondataavailable = event => {
+      if (event.data.size) chunks.push(event.data);
+    };
+    recorder.onerror = event => {
+      cleanup();
+      reject(event.error || new Error('Recording failed.'));
+    };
     recorder.onstop = () => {
-      resolve(new Blob(chunks, { type: mime }));
+      cleanup();
+      if (!chunks.length) reject(new Error('Recorder produced no video.'));
+      else {
+        const blob = new Blob(chunks, { type: recorder.mimeType || mime });
+        resolve(blob.type.includes('webm') ? fixWebmDuration(blob, duration, { logger: false }) : blob);
+      }
     };
-
-    recorder.start();
-
-    const startedAt = performance.now();
-    if (onProgress) {
-      const tick = () => {
-        const t = (performance.now() - startedAt) / 1000;
-        onProgress(Math.min(1, t / durationSec));
-        if (recorder.state === 'recording') requestAnimationFrame(tick);
-      };
-      tick();
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) {
+      abort();
+      return;
     }
 
-    setTimeout(() => {
-      if (recorder.state === 'recording') recorder.stop();
-    }, durationSec * 1000);
+    timer = setInterval(() => {
+      if (stopping) return;
+      const cycle = getClock()?.cycle;
+      if (cycle !== undefined && cycle !== lastCycle) {
+        lastCycle = cycle;
+        lastMotion = performance.now();
+      }
+      if (performance.now() - lastMotion > 12000) {
+        abort();
+        return;
+      }
+      if (recorder.state === 'inactive') {
+        if (cycle >= from) {
+          try {
+            recorder.start(500);
+            startedAt = performance.now();
+          } catch (error) { cleanup(); reject(error); }
+        } else if (performance.now() > timeout) {
+          cleanup();
+          reject(new Error('Playback did not reach the export range.'));
+        }
+      } else if (cycle >= to) {
+        duration = performance.now() - startedAt;
+        stopping = true;
+        clearInterval(timer);
+        recorder.stop();
+      } else {
+        onProgress?.(Math.min(1, (cycle - from) / (to - from)));
+      }
+    }, 8);
   });
 }
 
-export function downloadBlob(blob, filename = 'av-clip.webm') {
+export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

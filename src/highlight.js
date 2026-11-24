@@ -86,6 +86,7 @@ export function createHighlighter(view) {
         if (r) active.push({ from: r.from, to: r.to, expire: exp });
       }
     },
+    ranges: () => active,
     clear() { active = []; },
   };
 }

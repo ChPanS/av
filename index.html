@@ -46,16 +46,6 @@
 
     main { flex: 1; display: flex; min-height: 0; position: relative; }
 
-    /* ── задел под полноэкранный «оверлей»: редактор поверх рендера ──
-       включается классом .overlay-mode на <main> (см. setEditorOverlay в main.js).
-       Подсветка нот и редактор работают те же самые — просто всплывают поверх. */
-    main.overlay-mode .left {
-      position: absolute; inset: 0; z-index: 50; width: 100%;
-      border: none; background: rgba(5, 6, 8, 0.5); backdrop-filter: blur(3px);
-    }
-    main.overlay-mode .left .editors { height: 100% !important; }
-    main.overlay-mode .logpanel { display: none; }
-
     /* левая колонка — редакторы */
     .left { width: 46%; min-width: 340px; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
     .tabs { display: flex; gap: 2px; padding: 10px 12px 0; }
@@ -165,6 +155,7 @@
       #status { width: 100%; max-width: none; text-align: left; order: 99; padding: 6px 2px 0; }
     }
   </style>
+  <link rel="stylesheet" href="/src/workspace.css">
 </head>
 <body>
   <header>
@@ -177,9 +168,14 @@
       <div class="tabs">
         <button class="tab" id="tab-pattern">pattern.js</button>
         <button class="tab" id="tab-shader">shader.frag</button>
+        <button class="tab" id="split" aria-pressed="false">Both</button>
+        <button class="tab" id="editor-full" aria-pressed="false">Focus</button>
+        <button class="tab" id="font-down" aria-label="Smaller editor text">A−</button>
+        <button class="tab" id="font-up" aria-label="Larger editor text">A+</button>
       </div>
       <div class="editors">
         <div class="pane" id="pane-pattern"></div>
+        <div class="divider" id="code-divider" role="separator" aria-label="Resize code panels" aria-orientation="vertical" tabindex="0"></div>
         <div class="pane" id="pane-shader"></div>
       </div>
       <div class="logpanel hidden" id="logpanel">
@@ -188,14 +184,46 @@
       </div>
     </section>
 
+    <div class="divider" id="workspace-divider" role="separator" aria-label="Resize the editor and preview" aria-orientation="vertical" tabindex="0"></div>
     <section class="right">
       <div id="stage">
         <canvas id="gl"></canvas>
+        <canvas id="code-overlay" hidden aria-hidden="true"></canvas>
       </div>
+      <section id="timeline" class="timeline" aria-label="Cycle timeline">
+        <input type="range" id="position" min="1" max="24" value="1" step="1" aria-label="Go to cycle">
+        <div class="timeline-controls">
+          <output id="cycle-label">Cycle 1 / 24</output>
+          <label>From <input id="range-from" type="number" min="1" max="24" value="1"></label>
+          <label>To <input id="range-to" type="number" min="1" max="24" value="24"></label>
+          <label><input id="range-loop" type="checkbox"> Loop range</label>
+          <select id="markers" aria-label="Section markers"><option value="">Sections</option></select>
+          <button id="marker-add">Add section</button>
+          <button id="marker-remove" disabled>Remove section</button>
+        </div>
+      </section>
+      <details class="panel" id="overlay-settings">
+        <summary>Code overlay &amp; video</summary>
+        <div class="timeline-controls">
+          <label>Show <select id="overlay-source"><option value="off">Off</option><option value="strudel">Strudel</option><option value="glsl">GLSL</option><option value="both">Both</option></select></label>
+          <label>Code <select id="overlay-scope"><option value="selection">Selection</option><option value="full">Full</option></select></label>
+          <label>Corner <select id="overlay-corner"><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option></select></label>
+          <label>Size <input id="overlay-size" type="range" min="10" max="28" value="17"></label>
+          <label>Backdrop <input id="overlay-opacity" type="range" min="0" max="95" value="66"></label>
+          <label>Video <select id="video-height"><option>720</option><option>1080</option><option>480</option></select>p</label>
+          <label>FPS <select id="video-fps"><option>30</option><option>60</option></select></label>
+          <label>Format <select id="video-format"><option value="mp4">MP4</option><option value="webm">WebM</option></select></label>
+        </div>
+      </details>
+      <details class="panel" id="signal-panel">
+        <summary>.vis() monitor</summary>
+        <div id="signal-list"></div>
+        <output id="signal-source"></output>
+      </details>
       <div class="controls">
         <button class="ctl" id="play">▶ play / update</button>
         <button class="ctl" id="stop">■ stop</button>
-        <button class="ctl" id="share">● share (video)</button>
+        <button class="ctl" id="share">● export range</button>
         <button class="ctl" id="fullscreen">⤢ fullscreen</button>
         <button class="ctl" id="copylink">⎘ link</button>
         <button class="ctl" id="debug">⚙ debug</button>
