@@ -168,6 +168,7 @@
       <div class="tabs">
         <button class="tab" id="tab-pattern" aria-controls="pane-pattern">Strudel</button>
         <button class="tab" id="tab-shader" aria-controls="pane-shader">Shader</button>
+        <select class="shader-picker" id="shader-layer" aria-label="GLSL layer"></select>
         <button class="tab" id="editor-full" aria-pressed="false">Focus</button>
       </div>
       <div class="editors">
@@ -199,6 +200,20 @@
           <button id="marker-remove" disabled>Remove section</button>
         </div>
       </section>
+      <details class="panel" id="layers-panel">
+        <summary>Layers</summary>
+        <fieldset id="layer-controls">
+          <div class="timeline-controls">
+            <select id="layer-kind" aria-label="New layer type"></select>
+            <button id="layer-add">Add layer</button>
+            <button id="layer-up" aria-label="Move layer up">↑</button>
+            <button id="layer-down" aria-label="Move layer down">↓</button>
+            <button id="layer-remove">Remove</button>
+          </div>
+          <div class="timeline-controls" id="layer-list" aria-label="Layers, top first"></div>
+          <div id="layer-inspector"></div>
+        </fieldset>
+      </details>
       <details class="panel" id="overlay-settings">
         <summary>Code overlay &amp; video</summary>
         <div class="timeline-controls">
@@ -239,6 +254,29 @@
       </div>
     </section>
   </main>
+
+  <template id="layer-settings">
+    <div class="timeline-controls">
+      <label>Opacity <input type="range" data-layer-field="opacity" min="0" max="100"></label>
+      <label><input type="checkbox" data-layer-field="visible"> Visible</label>
+    </div>
+    <div class="timeline-controls" data-ascii>
+      <label>Preset <select data-layer-field="preset"></select></label>
+      <label>Shadows <input type="color" data-color="0"></label>
+      <label>Midtones <input type="color" data-color="1"></label>
+      <label>Highlights <input type="color" data-color="2"></label>
+      <label>Midpoint <input type="range" data-layer-field="midpoint" min="1" max="99"></label>
+      <label>Color signal <select data-layer-field="signal"></select></label>
+      <label>Amount <input type="range" data-layer-field="amount" min="0" max="100"></label>
+      <label>X <input type="range" data-layer-field="x" min="0" max="100"></label>
+      <label>Y <input type="range" data-layer-field="y" min="0" max="100"></label>
+      <label>Scale <input type="range" data-layer-field="scale" min="10" max="200"></label>
+      <label>Columns <input type="range" data-layer-field="columns" min="24" max="144"></label>
+      <label>Warp <input type="range" data-layer-field="warp" min="0" max="100"></label>
+      <label>Glyphs <input type="text" data-layer-field="glyphs" maxlength="48" size="12"></label>
+      <label><input type="checkbox" data-layer-field="transparent"> Transparent background</label>
+    </div>
+  </template>
 
   <div class="modal hidden" id="epilepsy">
     <div class="modal-box warn">

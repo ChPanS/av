@@ -159,8 +159,8 @@ export function scanUniformCatalog(code) {
   const { resolved } = resolveBases(scan(code));
   const catalog = resolved.map((r) => (
     r.prefix === 'i'
-      ? { name: r.base, type: STRUCT_NAME, fields: ['vel', 'pitch'] }
-      : { name: r.base, type: 'float', fields: null }
+      ? { kind: 'tag', name: r.base, type: STRUCT_NAME, fields: ['vel', 'pitch'] }
+      : { kind: 'tag', name: r.base, type: 'float', fields: null }
   ));
   for (const g of GLOBAL_KEYS) catalog.push({ name: g, type: 'float', fields: null });
   catalog.push({ name: 'uResolution', type: 'vec2', fields: null });

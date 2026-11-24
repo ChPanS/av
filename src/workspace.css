@@ -62,3 +62,10 @@ main.preview-only .right { min-height: 0; }
 .signal-value { font-variant-numeric: tabular-nums; color: #a6c3d6; }
 .signal canvas { width: 100%; height: 24px; background: repeating-linear-gradient(to bottom, transparent 0 7px, #32425555 7px 8px); }
 .monitor #signal-source { min-height: 2em; color: #a6b5c6; line-height: 1.5; }
+
+.shader-picker { max-width: 13em; min-width: 0; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; font: inherit; font-size: 12px; }
+#layers-panel[open] { max-height: min(32vh, 260px); overflow: auto; }
+#layer-controls { border: 0; margin: 0; padding: 0; min-width: 0; }
+#layer-list button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
+#layer-inspector [hidden] { display: none; }
+#layer-inspector input[type=color] { width: 24px; height: 19px; vertical-align: middle; padding: 0; }

@@ -15,12 +15,13 @@ import {
   evaluatePattern, start, stop, isInitialized, getCps, getRecorderStream,
   getClock, setLoopCycles, setMasterVolume, getHistory,
 } from './audio.js';
-import { initRenderer, loadShader, startRenderLoop, setClockProvider, observeFrames } from './renderer.js';
+import { initRenderer, loadShaders, startRenderLoop, setClockProvider, observeFrames } from './renderer.js';
 import { handleHap, syncTags, scanUniformCatalog, resetVisualState, decayUniforms } from './bridge.js';
 import { createHighlighter } from './highlight.js';
 import { createEditor } from './editor.js';
 import { recordingMime, recordClip, downloadBlob } from './recorder.js';
 import { convertWebmToMp4 } from './mp4.js';
+import { createLayers } from './layers.js';
 import { createOverlay } from './overlay.js';
 import { createTimeline } from './timeline.js';
 import { createMonitor } from './monitor.js';
@@ -52,6 +53,16 @@ let appliedShader = '';
 const runFromEditor = () => playBtn.click();
 const patternEd = createEditor(panePattern, loaded.pattern, 'js', runFromEditor);
 const shaderEd = createEditor(paneShader, loaded.shader, 'glsl', runFromEditor, () => scanUniformCatalog(patternEd.get()));
+let catalogCode;
+let catalogItems;
+const scene = createLayers($, loaded, shaderEd, () => {
+  const code = patternEd.get();
+  if (code !== catalogCode) {
+    catalogCode = code;
+    catalogItems = scanUniformCatalog(code);
+  }
+  return catalogItems;
+});
 const highlighter = createHighlighter(patternEd.view); // подсветка играющих нот
 
 const leftSection = $('left');
@@ -180,7 +191,7 @@ function reportError(prefix, e) {
 }
 
 // ---------- рендер: за предупреждением об эпилепсии ----------
-initRenderer(canvas);
+initRenderer(canvas, scene.items);
 setClockProvider(getClock);   // uBeat/uLoop/uBeatFrac берутся из часов лупа
 syncTags(patternEd.get());    // юниформы под теги .vis() из паттерна — ДО первой компиляции шейдера
 applyShader(true);
@@ -214,13 +225,14 @@ if (epiOk) {
 
 // компиляция шейдера из редактора; true = успех
 function applyShader(silent = false) {
-  const err = loadShader(shaderEd.get());
-  shaderEd.errors(err);
-  if (err) {
-    reportError('Shader error', new Error(err));
+  const failure = loadShaders(scene.snapshot());
+  if (failure) {
+    const name = scene.showError(failure.id, failure.error);
+    reportError(name, new Error(failure.error));
     return false;
   }
-  appliedShader = shaderEd.get();
+  shaderEd.errors(null);
+  appliedShader = scene.shaderKey();
   if (!silent) log('shader compiled', 'ok');
   return true;
 }
@@ -313,6 +325,7 @@ observeFrames(now => {
   if (now - lastTimeline > 100) {
     lastTimeline = now;
     timeline.update(getClock());
+    if ($('layers-panel').open) scene.refreshSignals();
   }
 });
 
@@ -408,7 +421,7 @@ shareBtn.onclick = async () => {
     return;
   }
   if (exporting) return;
-  if (patternEd.get() !== appliedPattern || shaderEd.get() !== appliedShader) {
+  if (patternEd.get() !== appliedPattern || scene.shaderKey() !== appliedShader) {
     setStatus('Press play / update to apply your edits before exporting.', true);
     return;
   }
@@ -425,6 +438,7 @@ shareBtn.onclick = async () => {
   }
   exporting = new AbortController();
   timeline.disable(true);
+  scene.lock(true);
   shareBtn.disabled = playBtn.disabled = true;
   try {
     stop();
@@ -471,13 +485,14 @@ shareBtn.onclick = async () => {
     captured = null;
     exporting = null;
     timeline.disable(false);
+    scene.lock(false);
     stopBtn.disabled = shareBtn.disabled = playBtn.disabled = false;
   }
 };
 
 // ---------- URL-шеринг сцены ----------
 linkBtn.onclick = async () => {
-  const payload = { pattern: patternEd.get(), shader: shaderEd.get() };
+  const payload = { pattern: patternEd.get(), layers: scene.snapshot() };
   const hash = btoa(encodeURIComponent(JSON.stringify(payload)));
   const url = location.origin + location.pathname + '#' + hash;
   try {
@@ -522,7 +537,7 @@ function loadFromHash() {
   if (!location.hash || location.hash.length < 2) return null;
   try {
     const obj = JSON.parse(decodeURIComponent(atob(location.hash.slice(1))));
-    if (obj.pattern && obj.shader) return obj;
+    if (typeof obj.pattern === 'string' && (typeof obj.shader === 'string' || Array.isArray(obj.layers))) return obj;
   } catch {}
   return null;
 }
