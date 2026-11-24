@@ -39,6 +39,47 @@ function snapshot(editor, name, full) {
   return { name, lines, document: state.doc.toString() };
 }
 
+function wrappedRows(pane, columns) {
+  pane.layouts ??= new Map();
+  if (pane.layouts.has(columns)) return pane.layouts.get(columns);
+  const rows = [];
+  for (const line of pane.lines) {
+    const runs = [];
+    let offset = 0;
+    for (const [text, color] of line.parts) {
+      runs.push({ from: offset, to: offset + text.length, color });
+      offset += text.length;
+    }
+    let run = 0;
+    let from = 0;
+    do {
+      let to = from;
+      let width = 0;
+      let breakAt = from;
+      while (to < line.text.length) {
+        const char = String.fromCodePoint(line.text.codePointAt(to));
+        const units = char === '\t' ? 4 : 1;
+        if (width + units > columns && to > from) break;
+        width += units;
+        to += char.length;
+        if (/\s/.test(char)) breakAt = to;
+      }
+      if (to < line.text.length && breakAt > from + (to - from) / 2) to = breakAt;
+      while (run < runs.length && runs[run].to <= from) run++;
+      const parts = [];
+      for (let i = run; i < runs.length && runs[i].from < to; i++) {
+        const part = runs[i];
+        parts.push([line.text.slice(Math.max(from, part.from), Math.min(to, part.to)), part.color]);
+      }
+      rows.push({ from: line.from + from, to: line.from + to, text: line.text.slice(from, to), parts });
+      from = to;
+    } while (from < line.text.length);
+  }
+  if (pane.layouts.size >= 4) pane.layouts.delete(pane.layouts.keys().next().value);
+  pane.layouts.set(columns, rows);
+  return rows;
+}
+
 export function createOverlay(shader, overlay, patternEd, shaderEd, highlighter, activePattern) {
   const preview = overlay.getContext('2d');
   const input = id => document.getElementById(id);
@@ -64,32 +105,42 @@ export function createOverlay(shader, overlay, patternEd, shaderEd, highlighter,
     const paneWidth = (width * (options.panes.length > 1 ? 0.94 : 0.68) - margin * (options.panes.length - 1)) / options.panes.length;
     const padding = Math.max(8, margin * 0.55);
     for (const [index, pane] of options.panes.entries()) {
-      const columns = Math.max(1, ...pane.lines.map(line => line.text.replaceAll('\t', '    ').length));
-      const requested = Math.min(width, height) * options.size / 590;
-      const size = Math.min(requested, (height * 0.84 - padding * 2) / ((pane.lines.length + 1) * 1.36),
-        (paneWidth - padding * 2) / (columns * 0.63));
+      const size = Math.min(width, height) * options.size / 590;
       if (size <= 0) continue;
+      ctx.font = size + 'px "JetBrains Mono", monospace';
+      const columns = Math.max(1, Math.floor((paneWidth - padding * 2) / ctx.measureText('M').width));
+      const rows = wrappedRows(pane, columns);
       const lineHeight = size * 1.36;
-      const boxHeight = (pane.lines.length + 1) * lineHeight + padding * 2;
+      const capacity = Math.max(1, Math.floor((height * 0.84 - padding * 2) / lineHeight) - 1);
+      const matches = pane.name === 'Strudel' && pane.document === activePattern();
+      const visibleNotes = matches ? active.filter(range => range.expire > now) : [];
+      const playingRow = visibleNotes.length ? rows.findIndex(line => visibleNotes.some(range => range.from < line.to && range.to > line.from)) : -1;
+      const pageStart = playingRow < 0 ? 0 : Math.floor(playingRow / capacity) * capacity;
+      const shownRows = rows.slice(pageStart, pageStart + capacity);
+      const boxHeight = (shownRows.length + 1) * lineHeight + padding * 2;
       const x = (options.corner.endsWith('right') ? width - margin - paneWidth * options.panes.length - margin * (options.panes.length - 1) : margin)
         + index * (paneWidth + margin);
       const y = options.corner.startsWith('bottom') ? height - margin - boxHeight : margin;
       ctx.fillStyle = 'rgba(10, 15, 24, ' + options.opacity + ')';
       ctx.fillRect(x, y, paneWidth, boxHeight);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, paneWidth, boxHeight);
+      ctx.clip();
       ctx.font = size + 'px "JetBrains Mono", monospace';
       ctx.textBaseline = 'top';
       ctx.fillStyle = '#aee688';
-      ctx.fillText(pane.name, x + padding, y + padding);
-      const matches = pane.name === 'Strudel' && pane.document === activePattern();
-      pane.lines.forEach((line, row) => {
+      const label = rows.length > capacity ? pane.name + '  ' + (pageStart + 1) + '–' + (pageStart + shownRows.length) + '/' + rows.length : pane.name;
+      ctx.fillText(label, x + padding, y + padding, paneWidth - padding * 2);
+      shownRows.forEach((line, row) => {
         const top = y + padding + (row + 1) * lineHeight;
         const left = x + padding;
         const measure = text => ctx.measureText(text.replaceAll('\t', '    ')).width;
-        if (matches) {
-          for (const range of active) {
+        if (visibleNotes.length) {
+          for (const range of visibleNotes) {
             const from = Math.max(line.from, range.from);
             const to = Math.min(line.to, range.to);
-            if (range.expire <= now || to <= from) continue;
+            if (to <= from) continue;
             ctx.fillStyle = 'rgba(198,255,46,0.36)';
             ctx.fillRect(left + measure(line.text.slice(0, from - line.from)), top, measure(line.text.slice(from - line.from, to - line.from)), lineHeight);
           }
@@ -101,6 +152,7 @@ export function createOverlay(shader, overlay, patternEd, shaderEd, highlighter,
           offset += measure(text);
         }
       });
+      ctx.restore();
     }
   }
 

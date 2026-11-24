@@ -166,12 +166,9 @@
   <main>
     <section class="left" id="left">
       <div class="tabs">
-        <button class="tab" id="tab-pattern">pattern.js</button>
-        <button class="tab" id="tab-shader">shader.frag</button>
-        <button class="tab" id="split" aria-pressed="false">Both</button>
+        <button class="tab" id="tab-pattern" aria-controls="pane-pattern">Strudel</button>
+        <button class="tab" id="tab-shader" aria-controls="pane-shader">Shader</button>
         <button class="tab" id="editor-full" aria-pressed="false">Focus</button>
-        <button class="tab" id="font-down" aria-label="Smaller editor text">A−</button>
-        <button class="tab" id="font-up" aria-label="Larger editor text">A+</button>
       </div>
       <div class="editors">
         <div class="pane" id="pane-pattern"></div>
@@ -215,11 +212,19 @@
           <label>Format <select id="video-format"><option value="mp4">MP4</option><option value="webm">WebM</option></select></label>
         </div>
       </details>
-      <details class="panel" id="signal-panel">
-        <summary>.vis() monitor</summary>
-        <div id="signal-list"></div>
-        <output id="signal-source"></output>
-      </details>
+      <div class="monitor-dock" id="signal-dock">
+        <details class="panel monitor" id="signal-panel">
+          <summary><span>.vis() Monitor</span><span id="signal-count"></span></summary>
+          <div class="monitor-body">
+            <div class="monitor-tools" id="signal-handle">
+              <button class="monitor-handle" id="signal-move" aria-label="Move monitor with arrow keys" hidden>⠿ Move</button>
+              <button class="monitor-button" id="signal-float" aria-pressed="false">Detach</button>
+            </div>
+            <div id="signal-list"></div>
+            <output id="signal-source"></output>
+          </div>
+        </details>
+      </div>
       <div class="controls">
         <button class="ctl" id="play">▶ play / update</button>
         <button class="ctl" id="stop">■ stop</button>

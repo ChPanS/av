@@ -79,6 +79,7 @@ export function initRenderer(canvasEl) {
 }
 
 function resize() {
+  if (!canvas.clientWidth || !canvas.clientHeight) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2); // на ретине не раздуваем
   const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
   const h = Math.max(1, Math.round(canvas.clientHeight * dpr));

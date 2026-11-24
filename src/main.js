@@ -54,77 +54,49 @@ const patternEd = createEditor(panePattern, loaded.pattern, 'js', runFromEditor)
 const shaderEd = createEditor(paneShader, loaded.shader, 'glsl', runFromEditor, () => scanUniformCatalog(patternEd.get()));
 const highlighter = createHighlighter(patternEd.view); // подсветка играющих нот
 
-// ---------- вкладки + мобильный аккордеон ----------
 const leftSection = $('left');
-const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
-
-function setTab(which) {
-  const onPattern = which === 'pattern';
-  panePattern.classList.toggle('hidden', !onPattern);
-  paneShader.classList.toggle('hidden', onPattern);
-  tabPattern.classList.toggle('active', onPattern);
-  tabShader.classList.toggle('active', !onPattern);
-  // CodeMirror нужно пересчитать размеры после показа/ресайза контейнера
-  const ed = onPattern ? patternEd : shaderEd;
-  requestAnimationFrame(() => ed.view.requestMeasure());
-}
-
-let mobileOpen = false;
-function setOpen(open) {
-  mobileOpen = open;
-  leftSection.classList.toggle('open', open);
-  if (open) {
-    const ed = tabPattern.classList.contains('active') ? patternEd : shaderEd;
-    // после анимации раскрытия перемерить редактор
-    setTimeout(() => ed.view.requestMeasure(), 240);
-  }
-}
-
-function onTab(which) {
-  const tab = which === 'pattern' ? tabPattern : tabShader;
-  const wasActive = tab.classList.contains('active');
-  setTab(which);
-  if (isMobile()) {
-    // тап по уже активной вкладке сворачивает; иначе разворачивает
-    if (wasActive && mobileOpen) setOpen(false);
-    else setOpen(true);
-  }
-}
-tabPattern.onclick = () => onTab('pattern');
-tabShader.onclick = () => onTab('shader');
-setTab('pattern'); // на мобиле стартуем свёрнутыми (mobileOpen=false)
-
 const workspace = document.querySelector('main');
-const split = $('split');
 const focus = $('editor-full');
-const measureEditors = () => {
+const editors = [
+  { tab: tabPattern, pane: panePattern, open: !matchMedia('(max-width: 820px)').matches },
+  { tab: tabShader, pane: paneShader, open: false },
+];
+let manualFocus = false;
+
+function measureEditors() {
   patternEd.view.requestMeasure();
   shaderEd.view.requestMeasure();
-};
-split.onclick = () => {
-  const enabled = leftSection.classList.toggle('split');
-  split.setAttribute('aria-pressed', String(enabled));
-  if (enabled) setOpen(true);
-  measureEditors();
-};
-focus.onclick = () => {
-  const enabled = workspace.classList.toggle('editor-focus');
-  focus.setAttribute('aria-pressed', String(enabled));
-  if (enabled) setOpen(true);
-  measureEditors();
-};
+}
 
-let font = 16;
-try { font = Math.max(12, Math.min(28, Number(localStorage.getItem('av-editor-font')) || 16)); } catch {}
-function fontSize(delta) {
-  font = Math.max(12, Math.min(28, font + delta));
-  leftSection.style.setProperty('--editor-font', font + 'px');
-  try { localStorage.setItem('av-editor-font', String(font)); } catch {}
+function layoutEditors() {
+  const count = editors.filter(editor => editor.open).length;
+  for (const { tab, pane, open } of editors) {
+    pane.classList.toggle('hidden', !open);
+    tab.classList.toggle('active', open);
+    tab.setAttribute('aria-pressed', String(open));
+  }
+  if (count !== 1) manualFocus = false;
+  const focused = count === 2 || manualFocus;
+  leftSection.classList.toggle('open', count > 0);
+  leftSection.classList.toggle('split', count === 2);
+  workspace.classList.toggle('editor-focus', focused);
+  workspace.classList.toggle('preview-only', count === 0);
+  focus.disabled = count !== 1;
+  focus.setAttribute('aria-pressed', String(focused));
   measureEditors();
 }
-$('font-down').onclick = () => fontSize(-1);
-$('font-up').onclick = () => fontSize(1);
-fontSize(0);
+
+for (const editor of editors) {
+  editor.tab.onclick = () => {
+    editor.open = !editor.open;
+    layoutEditors();
+  };
+}
+focus.onclick = () => {
+  manualFocus = !manualFocus;
+  layoutEditors();
+};
+layoutEditors();
 
 function addDivider(divider, container, property, initial) {
   let percent = initial;
